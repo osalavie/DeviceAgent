@@ -1,0 +1,85 @@
+{
+  "agent": {
+    "id": "agent-line-a-01",
+    "displayName": "A line test host",
+    "tray": {
+      "enabled": true
+    }
+  },
+  "sinks": {
+    "local": {
+      "type": "wsServer",
+      "bind": "127.0.0.1",
+      "port": 18080,
+      "allowedOrigins": [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173"
+      ],
+      "token": ""
+    }
+  },
+  "devices": [
+    {
+      "deviceId": "PT-001",
+      "type": "serial",
+      "deviceType": "pullTest",
+      "deviceName": "Wire pull tester 01",
+      "port": "COM3",
+      "baudRate": 9600,
+      "dataBits": 8,
+      "parity": "None",
+      "stopBits": "One",
+      "codec": {
+        "type": "delimiter",
+        "delimiter": "\r\n",
+        "encoding": "ascii",
+        "parse": {
+          "pattern": "^RESULT,FORCE=(?<force>\\d+\\.\\d+)N"
+        }
+      },
+      "sinks": ["local"]
+    },
+    {
+      "deviceId": "DS-001",
+      "type": "tcp",
+      "deviceType": "dieShear",
+      "deviceName": "Die shear tester 01",
+      "host": "192.168.1.50",
+      "port": 5000,
+      "reconnectMinSeconds": 1,
+      "reconnectMaxSeconds": 30,
+      "codec": {
+        "type": "delimiter",
+        "delimiter": "\r\n",
+        "encoding": "ascii",
+        "parse": {
+          "pattern": "^SHEAR,DIE=(?<dieId>\\S+),FORCE=(?<force>\\d+\\.\\d+)N"
+        }
+      },
+      "sinks": ["local"]
+    },
+    {
+      "deviceId": "PT-002",
+      "type": "file",
+      "deviceType": "pullTest",
+      "deviceName": "Wire pull tester 02 (file)",
+      "directory": "./data/in",
+      "pattern": "PT02_*.csv",
+      "stableSeconds": 5,
+      "pollIntervalSeconds": 5,
+      "archiveDirectory": "./data/archive",
+      "errorDirectory": "./data/error",
+      "codec": {
+        "type": "csv",
+        "csvDelimiter": ",",
+        "hasHeader": true,
+        "encoding": "utf-8",
+        "columns": {
+          "sampleId": "Sample",
+          "force": "ForceN"
+        }
+      },
+      "sinks": ["local"]
+    }
+  ]
+}

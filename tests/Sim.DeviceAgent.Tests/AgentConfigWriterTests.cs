@@ -1,0 +1,162 @@
+using System.Text.Json;
+using Sim.DeviceAgent.Configuration;
+using Xunit;
+
+namespace Sim.DeviceAgent.Tests;
+
+public sealed class AgentConfigWriterTests
+{
+    [Fact]
+    public void Save_WritesCleanCrLfJson_AndRoundTrips()
+    {
+        var root = CreateTempDirectory();
+        try
+        {
+            var config = new AgentConfig
+            {
+                Agent = new AgentOptions
+                {
+                    Id = "agent-test",
+                    DisplayName = "Test agent",
+                    StateDirectory = Path.Combine(root, "state"),
+                    Tray = new TrayOptions { Enabled = true }
+                },
+                Sinks = new Dictionary<string, SinkConfig>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["local"] = new SinkConfig
+                    {
+                        Type = "wsServer",
+                        Bind = "127.0.0.1",
+                        Port = 18080,
+                        AllowedOrigins = ["http://localhost:5173"],
+                        Token = string.Empty
+                    },
+                    ["center"] = new SinkConfig
+                    {
+                        Type = "wsClient",
+                        Url = "ws://127.0.0.1:18081/device",
+                        ReconnectMinSeconds = 1,
+                        ReconnectMaxSeconds = 30,
+                        SpoolSegmentMegabytes = 64,
+                        SpoolMaxMegabytes = 1024
+                    },
+                    ["mq"] = new SinkConfig
+                    {
+                        Type = "rabbitmq",
+                        Host = "mq.example.com",
+                        Port = 5672,
+                        VirtualHost = "/",
+                        UserName = "producer",
+                        Password = "secret",
+                        Exchange = "sim.device-agent",
+                        ExchangeType = "topic",
+                        RoutingKey = "device.{deviceType}.{deviceId}"
+                    }
+                },
+                Devices =
+                [
+                    new DeviceConfig
+                    {
+                        DeviceId = "DS-001",
+                        Type = "tcp",
+                        DeviceType = "dieShear",
+                        DeviceName = "Die shear tester",
+                        Host = "192.168.1.50",
+                        Port = "5000",
+                        ReconnectMinSeconds = 1,
+                        ReconnectMaxSeconds = 30,
+                        QueueCapacity = 1024,
+                        Codec = new CodecConfig
+                        {
+                            Type = "delimiter",
+                            Delimiter = "\r\n",
+                            Encoding = "ascii",
+                            Parse = new RegexParseOptions
+                            {
+                                Pattern = "^SHEAR,DIE=(?<dieId>\\S+),FORCE=(?<force>\\d+\\.\\d+)N"
+                            }
+                        },
+                        Sinks = ["local", "center", "mq"]
+                    }
+                ]
+            };
+
+            var path = Path.Combine(root, "agent.json");
+            AgentConfigWriter.Save(path, config);
+
+            var text = File.ReadAllText(path);
+            var withoutCrLf = text.Replace("\r\n", string.Empty, StringComparison.Ordinal);
+            Assert.DoesNotContain('\r', withoutCrLf);
+            Assert.DoesNotContain('\n', withoutCrLf);
+
+            var bytes = File.ReadAllBytes(path);
+            Assert.False(
+                bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF,
+                "Configuration files are written as UTF-8 without BOM.");
+
+            using var document = JsonDocument.Parse(text);
+            var agent = document.RootElement.GetProperty("agent");
+            Assert.Equal("state", agent.GetProperty("stateDirectory").GetString());
+
+            var device = document.RootElement.GetProperty("devices")[0];
+            Assert.Equal(JsonValueKind.Number, device.GetProperty("port").ValueKind);
+            Assert.Equal(5000, device.GetProperty("port").GetInt32());
+            Assert.False(device.TryGetProperty("baudRate", out _));
+            Assert.Equal("192.168.1.50", device.GetProperty("host").GetString());
+
+            var localSink = document.RootElement.GetProperty("sinks").GetProperty("local");
+            Assert.Equal("wsServer", localSink.GetProperty("type").GetString());
+            Assert.Equal("127.0.0.1", localSink.GetProperty("bind").GetString());
+            Assert.Equal(18080, localSink.GetProperty("port").GetInt32());
+            Assert.False(localSink.TryGetProperty("url", out _));
+            Assert.False(agent.TryGetProperty("localWs", out _));
+
+            var mqSink = document.RootElement.GetProperty("sinks").GetProperty("mq");
+            Assert.Equal("rabbitmq", mqSink.GetProperty("type").GetString());
+            Assert.Equal("mq.example.com", mqSink.GetProperty("host").GetString());
+            Assert.Equal("device.{deviceType}.{deviceId}", mqSink.GetProperty("routingKey").GetString());
+
+            var loaded = AgentConfigLoader.Load(path);
+            Assert.Empty(AgentConfigValidator.Validate(loaded));
+            Assert.Equal(3, loaded.Sinks.Count);
+            Assert.Equal("DS-001", Assert.Single(loaded.Devices).DeviceId);
+            Assert.Equal("5000", loaded.Devices[0].Port);
+            Assert.Equal("127.0.0.1", loaded.Sinks["local"].Bind);
+            Assert.Equal(18080, loaded.Sinks["local"].Port);
+            Assert.Equal("mq.example.com", loaded.Sinks["mq"].Host);
+            Assert.Equal("secret", loaded.Sinks["mq"].Password);
+            Assert.Equal(
+                "^SHEAR,DIE=(?<dieId>\\S+),FORCE=(?<force>\\d+\\.\\d+)N",
+                loaded.Devices[0].Codec.Parse?.Pattern);
+        }
+        finally
+        {
+            DeleteDirectory(root);
+        }
+    }
+
+    private static string CreateTempDirectory()
+    {
+        var directory = Path.Combine(
+            Path.GetTempPath(),
+            "sim-device-agent-writer-tests",
+            Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        return directory;
+    }
+
+    private static void DeleteDirectory(string directory)
+    {
+        try
+        {
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+        catch (IOException)
+        {
+            // Test cleanup only.
+        }
+    }
+}

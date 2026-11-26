@@ -1,0 +1,19 @@
+# 构建输出
+bin/
+obj/
+artifacts/
+.vs/
+*.user
+*.suo
+
+# 运行数据
+agent.json
+data/
+*.log
+.smoke-*/
+src/**/Properties/
+
+# 系统与编辑器
+.DS_Store
+Thumbs.db
+Desktop.ini
