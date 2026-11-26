@@ -1,10 +1,10 @@
 # 设备接入 Agent（多设备：串口/TCP/文件 → WebSocket）设计方案
 
-> 状态：P0 MVP、中心 `wsClient`/spool、配置热加载已实现（2026-11-16）；WinUI3 一体化托盘宿主 P0 已实施（2026-11-20），2026-11-26 增加主窗口“运行状态 / 配置”页签与设备、出口、Agent 的结构化配置编辑，工程拆分为 Core 类库与 WinUI3 应用；同日将 WebSocket 监听地址、令牌与 Origin 归属到各 `wsServer` 出口（支持多个监听地址），并新增 RabbitMQ 生产出口。Windows 服务/自启动、平台侧中心网关与 P2 能力待实施。当前宿主为 Windows 专用，本机模式不需要 TLS 和令牌。实现范围与运行方式见 [`README.md`](README.md) 与第 17 节。
+> 状态：P0 MVP、中心 `wsClient`/spool、配置热加载已实现（2026-11-16）；WinUI3 一体化托盘宿主 P0 已实施（2026-11-20），2026-11-26 增加主窗口“运行状态 / 配置”页签与设备、出口、Agent 的结构化配置编辑，工程拆分为 Core 类库与 WinUI3 应用；同日将 WebSocket 监听地址、令牌与 Origin 归属到各 `wsServer` 出口（支持多个监听地址），并新增 RabbitMQ 生产出口。Windows 服务/自启动、平台侧中心网关与 P2 能力待实施。当前宿主为 Windows 专用，本机模式不需要 TLS 和令牌。实现范围与运行方式见 [`README.md`](../README.md) 与第 17 节。
 >
 > 设计日期：2026-11-16
 >
-> 桌面端设计：[`DEVICE_AGENT_UI_DESIGN.md`](DEVICE_AGENT_UI_DESIGN.md)（WinUI3 一体化托盘宿主、设备配置管理、JS 解析脚本与开机启动；宿主外壳 P0 与设备/出口/Agent 配置编辑已实施，脚本、实时数据与日志页未实施）。
+> 桌面端设计：[`UI_DESIGN.md`](UI_DESIGN.md)（WinUI3 一体化托盘宿主、设备配置管理、JS 解析脚本与开机启动；宿主外壳 P0 与设备/出口/Agent 配置编辑已实施，脚本、实时数据与日志页未实施）。
 >
 > 适用范围：本仓库；与平台 `api`、`web` 的集成边界见第 12 节。
 >
@@ -147,7 +147,7 @@
 }
 ```
 
-`deviceId` 是唯一键；每台设备直接内嵌接入参数（`type` 判别 `serial`/`tcp`/`file`），不再有独立的源定义与引用。启动校验不通过时拒绝应用整份配置。示例展示目标配置；`wsServer`/`wsClient`/`rabbitmq` 已实现，`plugin` 解析器与 `spool.maxDays` 属后续阶段。可运行字段以 [`agent.example.json`](agent.example.json)、[`agent.center.example.json`](agent.center.example.json)、[`agent.rabbitmq.example.json`](agent.rabbitmq.example.json) 和 [`README.md`](README.md) 为准，差异见第 17 节。
+`deviceId` 是唯一键；每台设备直接内嵌接入参数（`type` 判别 `serial`/`tcp`/`file`），不再有独立的源定义与引用。启动校验不通过时拒绝应用整份配置。示例展示目标配置；`wsServer`/`wsClient`/`rabbitmq` 已实现，`plugin` 解析器与 `spool.maxDays` 属后续阶段。可运行字段以 [`agent.example.json`](../src/Sim.DeviceAgent.App/agent.example.json)、[`agent.center.example.json`](../src/Sim.DeviceAgent.App/agent.center.example.json)、[`agent.rabbitmq.example.json`](../src/Sim.DeviceAgent.App/agent.rabbitmq.example.json) 和 [`README.md`](../README.md) 为准，差异见第 17 节。
 
 示例中的 `agent.id` 为显式配置值；未配置时默认取首次安装时的机器名，`agentId` 与 `deviceId` 的命名规则见 3.4。
 
@@ -222,7 +222,7 @@
 | `lengthPrefix` | 1/2/4 字节长度头 + 载荷，适合私有二进制协议 |
 | `stxEtx` | 以 STX/ETX 包裹并支持转义，适合部分老设备 |
 | `modbusRtu` / `modbusTcp` | P2 提供，支持轮询读取寄存器作为通道数据源 |
-| `script` | P2 提供，受限脚本实现自定义切帧与解析；其中“分隔符切帧 + JS 解析”由 WinUI3 桌面端阶段先行实施，见 [`DEVICE_AGENT_UI_DESIGN.md`](DEVICE_AGENT_UI_DESIGN.md) |
+| `script` | P2 提供，受限脚本实现自定义切帧与解析；其中“分隔符切帧 + JS 解析”由 WinUI3 桌面端阶段先行实施，见 [`UI_DESIGN.md`](UI_DESIGN.md) |
 
 ### 5.2 解析与容错
 
@@ -438,7 +438,9 @@ Die 推力测试数据（同一上位机、不同解析插件）：
 
 ```text
 .
-├── DEVICE_AGENT_DESIGN.md          # 本文档
+├── docs/                           # 设计文档索引见 docs/README.md
+│   ├── ARCHITECTURE.md             # 本文档：采集运行时设计基线
+│   └── UI_DESIGN.md                # WinUI3 桌面端设计基线
 ├── Sim.DeviceAgent.slnx            # 独立解决方案，不加入 api/Sim.slnx
 ├── src/
 │   ├── Sim.DeviceAgent.App/        # WinUI3 宿主：运行状态与配置页、Shell_NotifyIcon 托盘、单实例
@@ -558,7 +560,7 @@ Die 推力测试数据（同一上位机、不同解析插件）：
 
 ## 17. 当前实现状态
 
-实现入口为本仓库，运行、配置和协议示例见 [`README.md`](README.md)。
+实现入口为本仓库，运行、配置和协议示例见 [`README.md`](../README.md)。
 
 | 能力 | 状态 | 说明 |
 | --- | --- | --- |
@@ -573,7 +575,7 @@ Die 推力测试数据（同一上位机、不同解析插件）：
 | 跨重启设备序号 | 已实现 | `stateDirectory/sequences.json` 按设备预留 100000 序号块，重启跳块避免序号复用，允许空洞 |
 | 平台侧中心网关 | 未实现 | 当前缺少接收端点、去重入库、在线状态与业务转发；Agent 只定义了 `hello` / `data` / `ack` / `heartbeat` 协议 |
 | 解析插件 / 厂商 SDK 插件 | 未实现 | `plugin` codec 会被启动校验拒绝 |
-| WinUI3 桌面端 / JS 解析脚本 | 部分实现 | 宿主外壳 P0 与设备/出口/Agent 结构化配置编辑已实施：校验后原子写回 `agent.json` 并触发热加载；解析脚本、实时数据、日志页与 Jint 沙箱解析待 P1，设计见 [`DEVICE_AGENT_UI_DESIGN.md`](DEVICE_AGENT_UI_DESIGN.md) |
+| WinUI3 桌面端 / JS 解析脚本 | 部分实现 | 宿主外壳 P0 与设备/出口/Agent 结构化配置编辑已实施：校验后原子写回 `agent.json` 并触发热加载；解析脚本、实时数据、日志页与 Jint 沙箱解析待 P1，设计见 [`UI_DESIGN.md`](UI_DESIGN.md) |
 | 配置热加载 | 已实现 | 文件监听 0.4 秒防抖、`POST /api/config/reload`、托盘手动重载强制应用、内容哈希去重；校验失败保留旧配置；`agent.id`、状态目录要求重启，出口（含监听地址）按新配置重建 |
 | Windows 托盘 | 已实现 | WinUI3 宿主内的原生 Win32 `Shell_NotifyIcon`：打开主界面、打开配置、重新加载配置、退出；关闭窗口最小化到托盘；托盘失败不阻止 Agent 运行 |
 | Windows 服务 / 开机自启 / 自动升级 | 未实现 | 当前为 WinUI3 托盘应用，关闭窗口后驻留托盘 |

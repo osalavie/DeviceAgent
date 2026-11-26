@@ -73,7 +73,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 foreach ($example in @("agent.example.json", "agent.center.example.json", "agent.rabbitmq.example.json")) {
-    Copy-Item -LiteralPath (Join-Path $ToolRoot $example) -Destination $Output -Force
+    Copy-Item -LiteralPath (Join-Path $ToolRoot (Join-Path "src\Sim.DeviceAgent.App" $example)) -Destination $Output -Force
 }
 
 Write-Host "Published to $Output"

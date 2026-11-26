@@ -2,11 +2,11 @@
 
 Sim.DeviceAgent 是运行在 Windows 上位机上的多设备采集转发 Agent。单个进程可同时承载多台串口、TCP 与文件设备，按设备独立排队、编号并持久化 spool；内置 delimiter / 正则、passthrough、CSV 编解码，数据可实时推送到本机 WebSocket，或带发布确认与断线补发地投递到中心网关 / RabbitMQ。附带 WinUI 3 托盘宿主、配置热加载和管理接口，自包含单文件发布即用。
 
-采集运行时 P0 MVP 已实现，设计基线见 [`DEVICE_AGENT_DESIGN.md`](DEVICE_AGENT_DESIGN.md)。
+采集运行时 P0 MVP 已实现，设计基线见 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)，文档索引与阅读顺序见 [`docs/README.md`](docs/README.md)。
 
 本仓库由通用平台基座仓的 `tool/` 目录独立而来，作为独立项目维护。
 
-桌面端 WinUI3 一体化托盘宿主 P0 已实施（2026-11-20）：工程拆分为 `Sim.DeviceAgent.Core` 类库与 `Sim.DeviceAgent.App` WinUI3 应用，原生 Win32 `Shell_NotifyIcon` 托盘、单实例和概览页可用。设备、出口与 Agent 的结构化配置编辑已可用；JS 解析脚本、实时数据与日志页面按 [`DEVICE_AGENT_UI_DESIGN.md`](DEVICE_AGENT_UI_DESIGN.md) 设计，尚未实施。
+桌面端 WinUI3 一体化托盘宿主 P0 已实施（2026-11-20）：工程拆分为 `Sim.DeviceAgent.Core` 类库与 `Sim.DeviceAgent.App` WinUI3 应用，原生 Win32 `Shell_NotifyIcon` 托盘、单实例和概览页可用。设备、出口与 Agent 的结构化配置编辑已可用；JS 解析脚本、实时数据与日志页面按 [`docs/UI_DESIGN.md`](docs/UI_DESIGN.md) 设计，尚未实施。
 
 > 状态：采集运行时 P0 MVP、中心上报和配置热加载已实现（2026-11-16）；WinUI3 桌面壳 P0 已实施（2026-11-20）。**2026-11-26 起 WebSocket 监听地址、令牌与 Origin 白名单归属到各 `wsServer` 出口，可同时监听多个地址；新增 RabbitMQ 生产出口。** 当前宿主面向单台上位机本机使用：本机出口仅回环监听，令牌可留空，不需要 TLS。解析插件、Windows 服务/开机自启和自动升级待后续阶段。平台侧中心网关尚未实现。
 >
@@ -60,7 +60,7 @@ dotnet build Sim.DeviceAgent.slnx
 2. 复制示例配置到应用输出目录并按现场修改：
 
 ```bash
-cp agent.example.json src/Sim.DeviceAgent.App/bin/x64/Debug/net10.0-windows10.0.19041.0/win-x64/agent.json
+cp src/Sim.DeviceAgent.App/agent.example.json src/Sim.DeviceAgent.App/bin/x64/Debug/net10.0-windows10.0.19041.0/win-x64/agent.json
 ```
 
 3. 启动桌面应用：
@@ -368,10 +368,10 @@ Agent 在超时内收到匹配帧后返回 `response`（`ok=true`）；超时返
 ```text
 .
 ├── README.md
-├── DEVICE_AGENT_DESIGN.md
-├── agent.example.json
-├── agent.center.example.json
-├── agent.rabbitmq.example.json
+├── docs/                           # 文档索引与阅读顺序见 docs/README.md
+│   ├── README.md                   # 文档索引与阅读顺序
+│   ├── ARCHITECTURE.md             # 采集运行时设计基线
+│   └── UI_DESIGN.md                # WinUI3 桌面端设计基线
 ├── Sim.DeviceAgent.slnx
 ├── src/
 │   ├── Sim.DeviceAgent.Contracts/  # 消息信封、FileRef、JSON 选项
@@ -384,6 +384,9 @@ Agent 在超时内收到匹配帧后返回 `response`（`ok=true`）；超时返
 │   │   ├── Spool/                  # 按设备 JSONL 分段与确认水位
 │   │   └── WebSockets/             # 每个 wsServer 出口的 WebSocket 服务
 │   └── Sim.DeviceAgent.App/        # WinUI3 宿主：运行状态/配置页、Shell_NotifyIcon 托盘、单实例
+│       ├── agent.example.json      # 串口/TCP/文件三类设备 → 本机 wsServer
+│       ├── agent.center.example.json   # 文件设备 → 本机 wsServer + 中心 wsClient
+│       └── agent.rabbitmq.example.json # 文件设备 → 本机 wsServer + RabbitMQ
 └── tests/
     └── Sim.DeviceAgent.Tests/      # 53 个单元/集成测试
 ```
