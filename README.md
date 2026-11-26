@@ -1,6 +1,8 @@
 # Sim.DeviceAgent
 
-一台上位机并行接入多台设备的采集转发 Agent。采集运行时 P0 MVP 已实现，设计基线见 [`DEVICE_AGENT_DESIGN.md`](DEVICE_AGENT_DESIGN.md)。
+Sim.DeviceAgent 是运行在 Windows 上位机上的多设备采集转发 Agent。单个进程可同时承载多台串口、TCP 与文件设备，按设备独立排队、编号并持久化 spool；内置 delimiter / 正则、passthrough、CSV 编解码，数据可实时推送到本机 WebSocket，或带发布确认与断线补发地投递到中心网关 / RabbitMQ。附带 WinUI 3 托盘宿主、配置热加载和管理接口，自包含单文件发布即用。
+
+采集运行时 P0 MVP 已实现，设计基线见 [`DEVICE_AGENT_DESIGN.md`](DEVICE_AGENT_DESIGN.md)。
 
 本仓库由通用平台基座仓的 `tool/` 目录独立而来，作为独立项目维护。
 
