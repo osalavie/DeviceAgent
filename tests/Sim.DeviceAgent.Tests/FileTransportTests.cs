@@ -22,7 +22,6 @@ public sealed class FileTransportTests
             {
                 DeviceId = "files",
                 Type = "file",
-                DeviceType = "pullTest",
                 Directory = input,
                 Pattern = "*.csv",
                 StableSeconds = 0.2,

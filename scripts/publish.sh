@@ -130,9 +130,7 @@ fi
 echo "Publishing Sim.DeviceAgent.App ($configuration/$runtime, self-contained=$self_contained, single-file=$single_file)"
 dotnet publish "${publish_args[@]}"
 
-for example in agent.example.json agent.center.example.json agent.rabbitmq.example.json; do
-    cp -f -- "$project/$example" "$output/"
-done
+cp -f -- "$project/agent.example.json" "$output/"
 
 echo "Published to $output"
 echo "Copy agent.example.json to agent.json next to the exe and edit it for the site."

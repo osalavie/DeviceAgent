@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO.Ports;
 using System.Net;
 using System.Text.RegularExpressions;
@@ -7,7 +8,7 @@ namespace Sim.DeviceAgent.Configuration;
 
 public static class AgentConfigValidator
 {
-    private static readonly HashSet<string> SupportedDeviceTypes = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> SupportedTransportTypes = new(StringComparer.OrdinalIgnoreCase)
     {
         "serial",
         "tcp",
@@ -25,7 +26,8 @@ public static class AgentConfigValidator
     {
         "wsServer",
         "wsClient",
-        "rabbitmq"
+        "rabbitmq",
+        "kafka"
     };
 
     private static readonly HashSet<string> SupportedExchangeTypes = new(StringComparer.OrdinalIgnoreCase)
@@ -34,6 +36,21 @@ public static class AgentConfigValidator
         "direct",
         "fanout",
         "headers"
+    };
+
+    private static readonly HashSet<string> SupportedKafkaSecurityProtocols = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "plaintext",
+        "ssl",
+        "saslplaintext",
+        "saslssl"
+    };
+
+    private static readonly HashSet<string> SupportedKafkaSaslMechanisms = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "plain",
+        "scramsha256",
+        "scramsha512"
     };
 
     public static IReadOnlyList<string> Validate(AgentConfig config)
@@ -81,8 +98,12 @@ public static class AgentConfigValidator
                     ValidateRabbitMqSink(sink.Key, sink.Value, errors);
                     break;
 
+                case "kafka":
+                    ValidateKafkaSink(sink.Key, sink.Value, errors);
+                    break;
+
                 default:
-                    errors.Add($"Sink '{sink.Key}' uses unsupported type '{sink.Value.Type}'. Supported values: wsServer, wsClient, rabbitmq.");
+                    errors.Add($"Sink '{sink.Key}' uses unsupported type '{sink.Value.Type}'. Supported values: wsServer, wsClient, rabbitmq, kafka.");
                     break;
             }
         }
@@ -117,11 +138,6 @@ public static class AgentConfigValidator
             else if (!deviceIds.Add(device.DeviceId))
             {
                 errors.Add($"Duplicate deviceId '{device.DeviceId}'.");
-            }
-
-            if (string.IsNullOrWhiteSpace(device.DeviceType))
-            {
-                errors.Add($"Device '{label}' requires deviceType.");
             }
 
             ValidateDeviceTransport(device, label, errors);
@@ -176,7 +192,7 @@ public static class AgentConfigValidator
 
     private static void ValidateDeviceTransport(DeviceConfig device, string label, List<string> errors)
     {
-        if (!SupportedDeviceTypes.Contains(device.Type))
+        if (!SupportedTransportTypes.Contains(device.Type))
         {
             errors.Add($"Device '{label}' uses unsupported type '{device.Type}'. Supported values: serial, tcp, file.");
             return;
@@ -448,6 +464,101 @@ public static class AgentConfigValidator
 
         ValidateReliableSink(sinkId, sink, "RabbitMQ", errors);
     }
+
+    private static void ValidateKafkaSink(string sinkId, SinkConfig sink, List<string> errors)
+    {
+        if (string.IsNullOrWhiteSpace(sink.BootstrapServers))
+        {
+            errors.Add($"Kafka sink '{sinkId}' requires bootstrapServers.");
+        }
+        else
+        {
+            foreach (var server in sink.BootstrapServers.Split(',', StringSplitOptions.TrimEntries))
+            {
+                if (!IsValidBootstrapServer(server))
+                {
+                    errors.Add($"Kafka sink '{sinkId}' bootstrapServers contains an invalid entry '{server}'.");
+                }
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(sink.Topic))
+        {
+            errors.Add($"Kafka sink '{sinkId}' requires topic.");
+        }
+
+        var securityProtocol = NormalizeKafkaSetting(sink.SecurityProtocol);
+        if (!SupportedKafkaSecurityProtocols.Contains(securityProtocol))
+        {
+            errors.Add($"Kafka sink '{sinkId}' securityProtocol must be plaintext, ssl, saslPlaintext or saslSsl.");
+        }
+
+        if (!SupportedKafkaSaslMechanisms.Contains(NormalizeKafkaSetting(sink.SaslMechanism)))
+        {
+            errors.Add($"Kafka sink '{sinkId}' saslMechanism must be plain, scramSha256 or scramSha512.");
+        }
+
+        if (securityProtocol is "saslplaintext" or "saslssl" &&
+            string.IsNullOrWhiteSpace(sink.SaslUsername))
+        {
+            errors.Add($"Kafka sink '{sinkId}' requires saslUsername when securityProtocol is SASL.");
+        }
+
+        ValidateReliableSink(sinkId, sink, "Kafka", errors);
+    }
+
+    private static bool IsValidBootstrapServer(string server)
+    {
+        if (string.IsNullOrWhiteSpace(server) || server.Any(char.IsWhiteSpace))
+        {
+            return false;
+        }
+
+        if (server.StartsWith('['))
+        {
+            var closing = server.IndexOf(']');
+            if (closing <= 1)
+            {
+                return false;
+            }
+
+            var remainder = server[(closing + 1)..];
+            if (remainder.Length == 0)
+            {
+                return true;
+            }
+
+            return remainder.StartsWith(':') &&
+                   int.TryParse(
+                       remainder[1..],
+                       NumberStyles.Integer,
+                       CultureInfo.InvariantCulture,
+                       out var ipv6Port) &&
+                   ipv6Port is >= 1 and <= 65535;
+        }
+
+        var colon = server.LastIndexOf(':');
+        if (colon < 0)
+        {
+            return true;
+        }
+
+        var host = server[..colon];
+        return host.Length > 0 &&
+               !host.Contains(':') &&
+               int.TryParse(
+                   server[(colon + 1)..],
+                   NumberStyles.Integer,
+                   CultureInfo.InvariantCulture,
+                   out var port) &&
+               port is >= 1 and <= 65535;
+    }
+
+    private static string NormalizeKafkaSetting(string? value)
+        => value?.Trim()
+            .Replace("-", string.Empty, StringComparison.Ordinal)
+            .Replace("_", string.Empty, StringComparison.Ordinal)
+            .ToLowerInvariant() ?? string.Empty;
 
     private static void ValidateCenterSink(string sinkId, SinkConfig sink, List<string> errors)
     {

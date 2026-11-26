@@ -102,7 +102,6 @@ public sealed class DeviceCommandTests
         {
             DeviceId = "PT-001",
             Type = "serial",
-            DeviceType = "pullTest",
             DeviceName = "Pull tester",
             Port = "COM1",
             QueueCapacity = 64,

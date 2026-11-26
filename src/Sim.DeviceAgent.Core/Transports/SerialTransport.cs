@@ -30,6 +30,7 @@ public sealed class SerialTransport : IDeviceTransport
                 port = CreatePort();
                 port.Open();
                 _port = port;
+                DiscardStaleInput(port);
                 await NotifyAsync(handler, new TransportStateChanged(TransportState.Connected), cancellationToken);
 
                 using var registration = cancellationToken.Register(static state =>
@@ -131,6 +132,35 @@ public sealed class SerialTransport : IDeviceTransport
 
         _writeLock.Dispose();
         return ValueTask.CompletedTask;
+    }
+
+    // 重连后先把打开前积压在驱动/系统缓冲区的旧帧读掉，避免把历史数据当成新数据。
+    // 不用 DiscardInBuffer/PurgeComm，避免 PURGE_RXABORT 把驱动的挂起读队列永久停掉。
+    private void DiscardStaleInput(SerialPort port)
+    {
+        try
+        {
+            var pending = port.BytesToRead;
+            if (pending <= 0)
+            {
+                return;
+            }
+
+            var buffer = new byte[pending];
+            var read = port.Read(buffer, 0, pending);
+            _logger.LogInformation(
+                "Serial device {DeviceId} discarded {Bytes} stale byte(s) after opening the port.",
+                _config.DeviceId,
+                read);
+        }
+        catch (TimeoutException)
+        {
+            // 旧数据在读取前已消失，无需处理。
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Serial device {DeviceId} could not discard stale input.", _config.DeviceId);
+        }
     }
 
     private SerialPort CreatePort()

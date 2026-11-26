@@ -32,7 +32,6 @@ public static class AgentConfigDefaults
                     DeviceId = "file-001",
                     Enabled = true,
                     Type = "file",
-                    DeviceType = "generic",
                     DeviceName = "文件接入（示例）",
                     Directory = Path.Combine(dataDirectory, "in"),
                     Pattern = "*.*",

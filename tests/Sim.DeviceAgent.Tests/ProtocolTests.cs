@@ -21,13 +21,13 @@ public sealed class ProtocolTests
     }
 
     [Fact]
-    public void Subscription_FiltersByDeviceAndType()
+    public void Subscription_FiltersByDevice()
     {
         var envelope = CreateEnvelope();
 
-        Assert.True(new ClientSubscription(["PT-001"], ["pullTest"]).Matches(envelope));
-        Assert.False(new ClientSubscription(["DS-001"], null).Matches(envelope));
-        Assert.False(new ClientSubscription(null, ["dieShear"]).Matches(envelope));
+        Assert.True(new ClientSubscription(["PT-001"]).Matches(envelope));
+        Assert.False(new ClientSubscription(["DS-001"]).Matches(envelope));
+        Assert.True(new ClientSubscription(null).Matches(envelope));
     }
 
     [Fact]
@@ -218,7 +218,6 @@ public sealed class ProtocolTests
         Assert.Equal(MessageTypes.Data, root.GetProperty("type").GetString());
         Assert.Equal("agent-test", root.GetProperty("agentId").GetString());
         Assert.Equal("PT-001", root.GetProperty("deviceId").GetString());
-        Assert.Equal("pullTest", root.GetProperty("deviceType").GetString());
         Assert.Equal(7, root.GetProperty("seq").GetInt64());
         Assert.False(root.TryGetProperty("channelId", out _));
         Assert.False(root.TryGetProperty("text", out _));
@@ -232,7 +231,6 @@ public sealed class ProtocolTests
             Type = MessageTypes.Data,
             AgentId = "agent-test",
             DeviceId = "PT-001",
-            DeviceType = "pullTest",
             Seq = 7,
             Ts = DateTimeOffset.UtcNow
         };

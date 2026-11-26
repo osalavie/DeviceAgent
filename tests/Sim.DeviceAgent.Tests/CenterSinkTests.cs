@@ -176,7 +176,6 @@ public sealed class CenterSinkTests
             Type = MessageTypes.Data,
             AgentId = "agent-test",
             DeviceId = "PT-001",
-            DeviceType = "pullTest",
             Seq = seq,
             Ts = DateTimeOffset.UtcNow,
             Raw = "eA==",

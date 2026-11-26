@@ -1,7 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Globalization;
-using System.IO.Ports;
 using System.Text;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
@@ -10,6 +9,8 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
 using Sim.DeviceAgent.App.ConfigEditor;
+using Sim.DeviceAgent.App.Devices;
+using Sim.DeviceAgent.App.Shell;
 using Sim.DeviceAgent.Configuration;
 using Sim.DeviceAgent.Hosting;
 
@@ -18,8 +19,10 @@ namespace Sim.DeviceAgent.App;
 public sealed partial class MainWindow : Window
 {
     private readonly AgentRuntimeHost? _host;
+    private readonly StartupGuardService? _startupGuard;
     private readonly string _configPath;
     private readonly DispatcherQueueTimer _timer;
+    private readonly DispatcherQueueTimer _noticeTimer;
     private readonly ObservableCollection<string> _devices = [];
     private readonly ObservableCollection<string> _sinks = [];
     private readonly ObservableCollection<DeviceEntry> _deviceEntries = [];
@@ -32,10 +35,30 @@ public sealed partial class MainWindow : Window
     private bool _suppressDeviceSelection;
     private bool _suppressSinkSelection;
     private bool _allowClose;
+    private bool _suppressStartupToggle;
+    private DateTimeOffset? _lastReloadSuccessAt;
+    private string? _lastReloadError;
 
-    public MainWindow(AgentRuntimeHost? host, string configPath, string? startupError, string? startupNotice = null)
+    internal MainWindow(
+        AgentRuntimeHost? host,
+        string configPath,
+        string? startupError,
+        string? startupNotice = null,
+        StartupGuardService? startupGuard = null)
     {
         InitializeComponent();
+        TitleBarChrome.Attach(this, TitleBarRoot, TitleBarDragRegion, CaptionInsetColumn);
+
+        _startupGuard = startupGuard;
+        _suppressStartupToggle = true;
+        StartWithWindowsToggle.IsOn = startupGuard?.StartWithWindows ?? false;
+        StartWithWindowsToggle.IsEnabled = startupGuard is not null;
+        _suppressStartupToggle = false;
+
+        _noticeTimer = DispatcherQueue.CreateTimer();
+        _noticeTimer.Interval = TimeSpan.FromSeconds(3);
+        _noticeTimer.IsRepeating = false;
+        _noticeTimer.Tick += (_, _) => ConfigInfoBar.IsOpen = false;
 
         _host = host;
         _configPath = Path.GetFullPath(configPath);
@@ -67,6 +90,7 @@ public sealed partial class MainWindow : Window
         _timer.Tick += (_, _) => Refresh();
         _timer.Start();
 
+        SyncReloadBaseline();
         Refresh();
     }
 
@@ -107,8 +131,7 @@ public sealed partial class MainWindow : Window
                      SpoolDirectoryBox,
                      AgentIdText,
                      AgentDisplayNameBox,
-                     AgentStateDirectoryText,
-                     AgentTrayText
+                     AgentStateDirectoryText
                  })
         {
             textBox.IsSpellCheckEnabled = false;
@@ -120,7 +143,6 @@ public sealed partial class MainWindow : Window
     {
         ErrorBar.Message = message;
         ErrorBar.IsOpen = true;
-        StateText.Text = "配置或运行时错误";
     }
 
     public void AllowClose() => _allowClose = true;
@@ -145,31 +167,7 @@ public sealed partial class MainWindow : Window
         }
 
         var snapshot = _host.GetSnapshot();
-        var displayName = string.IsNullOrWhiteSpace(snapshot.DisplayName)
-            ? snapshot.AgentId
-            : $"{snapshot.DisplayName}（{snapshot.AgentId}）";
-
-        if (!ErrorBar.IsOpen)
-        {
-            var wsServers = snapshot.Sinks
-                .Where(sink => string.Equals(sink.Type, "wsServer", StringComparison.OrdinalIgnoreCase) &&
-                               string.Equals(sink.State, "listening", StringComparison.OrdinalIgnoreCase))
-                .Select(sink => sink.Endpoint)
-                .Where(endpoint => !string.IsNullOrWhiteSpace(endpoint))
-                .ToArray();
-            SetTextIfChanged(
-                StateText,
-                wsServers.Length == 0
-                    ? "运行中 · 未配置或未启动本机 WebSocket 出口"
-                    : $"运行中 · {string.Join("，", wsServers)}");
-        }
-
-        SetTextIfChanged(HeaderText, $"Device Agent · {displayName}");
-        SetTextIfChanged(
-            ReloadText,
-            snapshot.Config.LastError is null
-                ? snapshot.Config.LastMessage
-                : $"最近错误：{snapshot.Config.LastError}");
+        UpdateReloadNotice(snapshot.Config);
 
         UpdateItems(
             _devices,
@@ -188,11 +186,37 @@ public sealed partial class MainWindow : Window
             }));
     }
 
-    private static void SetTextIfChanged(TextBlock textBlock, string value)
+    private void SyncReloadBaseline()
     {
-        if (!string.Equals(textBlock.Text, value, StringComparison.Ordinal))
+        if (_host is null)
         {
-            textBlock.Text = value;
+            return;
+        }
+
+        var status = _host.GetSnapshot().Config;
+        _lastReloadSuccessAt = status.LastSuccessAt;
+        _lastReloadError = status.LastError;
+    }
+
+    private void UpdateReloadNotice(ConfigReloadStatus status)
+    {
+        if (status.LastSuccessAt != _lastReloadSuccessAt)
+        {
+            _lastReloadSuccessAt = status.LastSuccessAt;
+            _lastReloadError = status.LastError;
+            ShowConfigMessage(status.LastMessage, InfoBarSeverity.Success);
+            return;
+        }
+
+        if (string.Equals(status.LastError, _lastReloadError, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _lastReloadError = status.LastError;
+        if (status.LastError is not null)
+        {
+            ShowConfigMessage($"配置重载失败：{status.LastError}", InfoBarSeverity.Error);
         }
     }
 
@@ -314,14 +338,14 @@ public sealed partial class MainWindow : Window
             AgentIdText.Text = string.Empty;
             AgentDisplayNameBox.Text = string.Empty;
             AgentStateDirectoryText.Text = string.Empty;
-            AgentTrayText.Text = string.Empty;
+            AgentTrayToggle.IsOn = false;
             return;
         }
 
         AgentIdText.Text = _editorAgent.Id;
         AgentDisplayNameBox.Text = _editorAgent.DisplayName;
         AgentStateDirectoryText.Text = _editorAgent.StateDirectory;
-        AgentTrayText.Text = _editorAgent.Tray.Enabled ? "启用" : "停用";
+        AgentTrayToggle.IsOn = _editorAgent.Tray.Enabled;
     }
 
     private void ApplyAgentForm()
@@ -332,6 +356,7 @@ public sealed partial class MainWindow : Window
         }
 
         _editorAgent.DisplayName = AgentDisplayNameBox.Text.Trim();
+        _editorAgent.Tray.Enabled = AgentTrayToggle.IsOn;
     }
 
     private void OnConfigDeviceSelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -363,12 +388,11 @@ public sealed partial class MainWindow : Window
         DeviceIdBox.Text = config.DeviceId;
         DeviceIdBox.IsReadOnly = !entry.IsNew;
         DeviceNameBox.Text = config.DeviceName;
-        SelectComboByText(DeviceTypeCombo, NormalizeDeviceType(config.Type));
-        SelectComboByText(DeviceCategoryCombo, config.DeviceType);
+        SelectComboByText(TransportTypeCombo, NormalizeTransportType(config.Type));
         QueueCapacityBox.Value = config.QueueCapacity;
         DeviceEnabledToggle.IsOn = config.Enabled;
 
-        SelectComboByText(PortCombo, config.Port);
+        SelectPort(config.Port);
         SelectComboByText(BaudRateCombo, config.BaudRate.ToString(CultureInfo.InvariantCulture));
         SelectComboByText(DataBitsCombo, config.DataBits.ToString(CultureInfo.InvariantCulture));
         SelectComboByText(ParityCombo, config.Parity);
@@ -415,15 +439,14 @@ public sealed partial class MainWindow : Window
         var config = _currentDevice.Config;
         config.DeviceId = DeviceIdBox.Text.Trim();
         config.DeviceName = DeviceNameBox.Text.Trim();
-        config.Type = NormalizeDeviceType(GetComboText(DeviceTypeCombo));
-        config.DeviceType = GetComboText(DeviceCategoryCombo).Trim();
+        config.Type = NormalizeTransportType(GetComboText(TransportTypeCombo));
         config.QueueCapacity = IntValue(QueueCapacityBox, 1024);
         config.Enabled = DeviceEnabledToggle.IsOn;
 
         switch (config.Type)
         {
             case "serial":
-                config.Port = GetComboText(PortCombo);
+                config.Port = ResolveSelectedPort();
                 break;
 
             case "tcp":
@@ -521,7 +544,6 @@ public sealed partial class MainWindow : Window
             DeviceId = string.Empty,
             Enabled = true,
             Type = "serial",
-            DeviceType = "scale",
             DeviceName = "新设备",
             Port = string.Empty,
             BaudRate = 9600,
@@ -546,7 +568,7 @@ public sealed partial class MainWindow : Window
 
     private void UpdateTransportVisibility()
     {
-        var type = NormalizeDeviceType(GetComboText(DeviceTypeCombo));
+        var type = NormalizeTransportType(GetComboText(TransportTypeCombo));
         SerialFields.Visibility = type == "serial" ? Visibility.Visible : Visibility.Collapsed;
         TcpFields.Visibility = type == "tcp" ? Visibility.Visible : Visibility.Collapsed;
         FileFields.Visibility = type == "file" ? Visibility.Visible : Visibility.Collapsed;
@@ -578,23 +600,61 @@ public sealed partial class MainWindow : Window
 
     private void OnRefreshPortsClick(object sender, RoutedEventArgs e)
     {
-        var current = GetComboText(PortCombo);
+        var current = ResolveSelectedPort();
         RefreshPorts();
-        SelectComboByText(PortCombo, current);
+        SelectPort(current);
     }
 
     private void RefreshPorts()
     {
         try
         {
-            PortCombo.ItemsSource = SerialPort.GetPortNames()
-                .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+            PortCombo.ItemsSource = SerialPortCatalog.Enumerate()
+                .Select(info => new PortChoice(info.PortName, info.DisplayName))
                 .ToArray();
         }
         catch (Exception)
         {
             // Port enumeration is best effort; users can still type a port name.
         }
+    }
+
+    private void SelectPort(string? portName)
+    {
+        var choice = PortCombo.Items
+            .OfType<PortChoice>()
+            .FirstOrDefault(item => string.Equals(item.PortName, portName, StringComparison.OrdinalIgnoreCase));
+        if (choice is not null)
+        {
+            PortCombo.SelectedItem = choice;
+            return;
+        }
+
+        PortCombo.SelectedIndex = -1;
+        PortCombo.Text = portName ?? string.Empty;
+    }
+
+    private string ResolveSelectedPort()
+    {
+        if (PortCombo.SelectedItem is PortChoice choice &&
+            string.Equals(GetComboText(PortCombo), choice.DisplayName, StringComparison.Ordinal))
+        {
+            return choice.PortName;
+        }
+
+        var text = GetComboText(PortCombo);
+        if (text.Length == 0)
+        {
+            return string.Empty;
+        }
+
+        var match = System.Text.RegularExpressions.Regex.Match(text, @"^COM\d+", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        return match.Success ? match.Value.ToUpperInvariant() : text;
+    }
+
+    private sealed record PortChoice(string PortName, string DisplayName)
+    {
+        public override string ToString() => DisplayName;
     }
 
     private void OnConfigSinkSelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -647,6 +707,15 @@ public sealed partial class MainWindow : Window
         MqDurableToggle.IsOn = config.Durable;
         MqPersistentToggle.IsOn = config.Persistent;
 
+        KafkaBootstrapBox.Text = DefaultIfEmpty(config.BootstrapServers, "127.0.0.1:9092");
+        KafkaTopicBox.Text = config.Topic;
+        KafkaMessageKeyBox.Text = DefaultIfEmpty(config.MessageKey, "{agentId}:{deviceId}");
+        SelectComboByText(KafkaSecurityProtocolCombo, DefaultIfEmpty(config.SecurityProtocol, "plaintext"));
+        SelectComboByText(KafkaSaslMechanismCombo, DefaultIfEmpty(config.SaslMechanism, "plain"));
+        KafkaSaslUsernameBox.Text = config.SaslUsername;
+        KafkaSaslPasswordBox.Password = config.SaslPassword;
+        KafkaSslCaLocationBox.Text = config.SslCaLocation ?? string.Empty;
+
         SinkReconnectMinBox.Value = config.ReconnectMinSeconds;
         SinkReconnectMaxBox.Value = config.ReconnectMaxSeconds;
         SpoolSegmentBox.Value = config.SpoolSegmentMegabytes;
@@ -687,6 +756,20 @@ public sealed partial class MainWindow : Window
                 ApplyReliableSinkForm(config);
                 break;
 
+            case "kafka":
+                config.BootstrapServers = DefaultIfEmpty(KafkaBootstrapBox.Text, "127.0.0.1:9092");
+                config.Topic = KafkaTopicBox.Text.Trim();
+                config.MessageKey = DefaultIfEmpty(KafkaMessageKeyBox.Text, "{agentId}:{deviceId}");
+                config.SecurityProtocol = DefaultIfEmpty(GetComboText(KafkaSecurityProtocolCombo), "plaintext");
+                config.SaslMechanism = DefaultIfEmpty(GetComboText(KafkaSaslMechanismCombo), "plain");
+                config.SaslUsername = KafkaSaslUsernameBox.Text.Trim();
+                config.SaslPassword = KafkaSaslPasswordBox.Password;
+                config.SslCaLocation = string.IsNullOrWhiteSpace(KafkaSslCaLocationBox.Text)
+                    ? null
+                    : KafkaSslCaLocationBox.Text.Trim();
+                ApplyReliableSinkForm(config);
+                break;
+
             default:
                 config.Url = CenterUrlBox.Text.Trim();
                 config.Token = CenterTokenBox.Password;
@@ -714,6 +797,7 @@ public sealed partial class MainWindow : Window
         WsServerSinkFields.Visibility = normalized == "wsserver" ? Visibility.Visible : Visibility.Collapsed;
         WsClientSinkFields.Visibility = normalized == "wsclient" ? Visibility.Visible : Visibility.Collapsed;
         RabbitMqSinkFields.Visibility = normalized == "rabbitmq" ? Visibility.Visible : Visibility.Collapsed;
+        KafkaSinkFields.Visibility = normalized == "kafka" ? Visibility.Visible : Visibility.Collapsed;
         ReliableSinkFields.Visibility = normalized == "wsserver" ? Visibility.Collapsed : Visibility.Visible;
     }
 
@@ -748,6 +832,13 @@ public sealed partial class MainWindow : Window
                 Exchange = "sim.device-agent",
                 ExchangeType = "topic",
                 RoutingKey = "device.{deviceId}"
+            },
+            "kafka" => new SinkConfig
+            {
+                Type = "kafka",
+                BootstrapServers = "127.0.0.1:9092",
+                Topic = "devices.{deviceId}",
+                MessageKey = "{agentId}:{deviceId}"
             },
             _ => new SinkConfig
             {
@@ -786,6 +877,7 @@ public sealed partial class MainWindow : Window
         typeCombo.Items.Add(new ComboBoxItem { Content = "wsServer" });
         typeCombo.Items.Add(new ComboBoxItem { Content = "wsClient" });
         typeCombo.Items.Add(new ComboBoxItem { Content = "rabbitmq" });
+        typeCombo.Items.Add(new ComboBoxItem { Content = "kafka" });
         typeCombo.SelectedIndex = 0;
         ConfigureDropDownPopup(typeCombo);
 
@@ -889,6 +981,7 @@ public sealed partial class MainWindow : Window
         {
             "wsserver" => "wsServer",
             "rabbitmq" => "rabbitmq",
+            "kafka" => "kafka",
             _ => "wsClient"
         };
 
@@ -1114,6 +1207,7 @@ public sealed partial class MainWindow : Window
             ShowConfigMessage($"配置已保存，但应用失败：{ex.Message}", InfoBarSeverity.Warning);
         }
 
+        SyncReloadBaseline();
         Refresh();
     }
 
@@ -1203,14 +1297,42 @@ public sealed partial class MainWindow : Window
         return await dialog.ShowAsync() == ContentDialogResult.Primary;
     }
 
+    private void OnStartWithWindowsToggled(object sender, RoutedEventArgs e)
+    {
+        if (_suppressStartupToggle || _startupGuard is null)
+        {
+            return;
+        }
+
+        var enabled = StartWithWindowsToggle.IsOn;
+        try
+        {
+            _startupGuard.SetStartWithWindows(enabled);
+            ShowConfigMessage(
+                enabled
+                    ? "已开启开机自启：登录 Windows 后由守护进程拉起并驻留托盘。"
+                    : "已关闭开机自启；当前运行的实例不受影响。",
+                InfoBarSeverity.Success);
+        }
+        catch (Exception ex)
+        {
+            ShowConfigMessage($"开机自启设置失败：{ex.Message}", InfoBarSeverity.Error);
+            _suppressStartupToggle = true;
+            StartWithWindowsToggle.IsOn = !enabled;
+            _suppressStartupToggle = false;
+        }
+    }
+
     private void ShowConfigMessage(string message, InfoBarSeverity severity)
     {
         ConfigInfoBar.Severity = severity;
         ConfigInfoBar.Message = message;
         ConfigInfoBar.IsOpen = true;
+        _noticeTimer.Stop();
+        _noticeTimer.Start();
     }
 
-    private static string NormalizeDeviceType(string? type)
+    private static string NormalizeTransportType(string? type)
         => type?.Trim().ToLowerInvariant() switch
         {
             "tcp" => "tcp",
@@ -1223,6 +1345,7 @@ public sealed partial class MainWindow : Window
         {
             "wsserver" => "wsserver",
             "rabbitmq" => "rabbitmq",
+            "kafka" => "kafka",
             _ => "wsclient"
         };
 

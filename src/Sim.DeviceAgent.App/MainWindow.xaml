@@ -7,7 +7,7 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid Padding="20" RowSpacing="12">
+    <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -15,20 +15,36 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <StackPanel Grid.Row="0" Spacing="4">
-            <TextBlock x:Name="HeaderText" FontSize="22" FontWeight="SemiBold" Text="Device Agent" />
-            <TextBlock x:Name="StateText" Opacity="0.8" Text="正在启动…" />
-        </StackPanel>
+        <Grid x:Name="TitleBarRoot" Height="48">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition x:Name="CaptionInsetColumn" Width="0" />
+            </Grid.ColumnDefinitions>
+            <Grid x:Name="TitleBarDragRegion" Background="Transparent">
+                <TextBlock
+                    Margin="16,0,0,0"
+                    VerticalAlignment="Center"
+                    FontSize="12"
+                    Text="Device Agent" />
+            </Grid>
+        </Grid>
 
         <InfoBar
             x:Name="ErrorBar"
             Grid.Row="1"
+            Margin="18,4,18,0"
             Title="配置或运行时错误"
             IsClosable="False"
             IsOpen="False"
             Severity="Error" />
 
-        <TabView x:Name="MainTabs" Grid.Row="2" IsAddTabButtonVisible="False" TabWidthMode="SizeToContent">
+        <TabView
+            x:Name="MainTabs"
+            Grid.Row="2"
+            Margin="18,4,18,10"
+            IsAddTabButtonVisible="False"
+            TabWidthMode="SizeToContent">
             <TabViewItem Header="运行状态" IsClosable="False">
                 <Grid Padding="0,12,0,0" ColumnSpacing="24">
                     <Grid.ColumnDefinitions>
@@ -111,19 +127,20 @@
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
                                         </Grid.ColumnDefinitions>
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="Auto" />
                                             <RowDefinition Height="Auto" />
-                                            <RowDefinition Height="Auto" />
                                         </Grid.RowDefinitions>
 
-                                        <StackPanel Spacing="4">
+                                        <StackPanel Grid.ColumnSpan="2" Spacing="4">
                                             <TextBlock FontSize="12" Opacity="0.7" Text="设备编号（唯一，保存后不可改）" />
                                             <TextBox x:Name="DeviceIdBox" />
                                         </StackPanel>
 
-                                        <StackPanel Grid.Column="1" Spacing="4">
+                                        <StackPanel Grid.Column="2" Grid.ColumnSpan="2" Spacing="4">
                                             <TextBlock FontSize="12" Opacity="0.7" Text="设备名称" />
                                             <TextBox x:Name="DeviceNameBox" />
                                         </StackPanel>
@@ -131,7 +148,7 @@
                                         <StackPanel Grid.Row="1" Spacing="4">
                                             <TextBlock FontSize="12" Opacity="0.7" Text="接入方式" />
                                             <ComboBox
-                                                x:Name="DeviceTypeCombo"
+                                                x:Name="TransportTypeCombo"
                                                 HorizontalAlignment="Stretch"
                                                 SelectionChanged="OnDeviceTransportChanged">
                                                 <ComboBoxItem Content="serial" />
@@ -141,15 +158,6 @@
                                         </StackPanel>
 
                                         <StackPanel Grid.Row="1" Grid.Column="1" Spacing="4">
-                                            <TextBlock FontSize="12" Opacity="0.7" Text="设备类型（可输入新类型）" />
-                                            <ComboBox x:Name="DeviceCategoryCombo" HorizontalAlignment="Stretch" IsEditable="True">
-                                                <ComboBoxItem Content="scale" />
-                                                <ComboBoxItem Content="pullTest" />
-                                                <ComboBoxItem Content="dieShear" />
-                                            </ComboBox>
-                                        </StackPanel>
-
-                                        <StackPanel Grid.Row="2" Spacing="4">
                                             <TextBlock FontSize="12" Opacity="0.7" Text="队列容量（16–1000000）" />
                                             <NumberBox
                                                 x:Name="QueueCapacityBox"
@@ -159,7 +167,7 @@
                                                 SpinButtonPlacementMode="Compact" />
                                         </StackPanel>
 
-                                        <StackPanel Grid.Row="2" Grid.Column="1" Spacing="4">
+                                        <StackPanel Grid.Row="1" Grid.Column="2" Spacing="4">
                                             <TextBlock FontSize="12" Opacity="0.7" Text="启用" />
                                             <ToggleSwitch
                                                 x:Name="DeviceEnabledToggle"
@@ -175,26 +183,34 @@
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="*" />
                                             </Grid.ColumnDefinitions>
                                             <Grid.RowDefinitions>
                                                 <RowDefinition Height="Auto" />
                                                 <RowDefinition Height="Auto" />
                                                 <RowDefinition Height="Auto" />
-                                                <RowDefinition Height="Auto" />
                                             </Grid.RowDefinitions>
 
-                                            <StackPanel Spacing="4">
+                                            <StackPanel Grid.ColumnSpan="2" Spacing="4">
                                                 <TextBlock FontSize="12" Opacity="0.7" Text="串口" />
-                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <Grid ColumnSpacing="6">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
                                                     <ComboBox
                                                         x:Name="PortCombo"
-                                                        Width="180"
+                                                        HorizontalAlignment="Stretch"
                                                         IsEditable="True" />
-                                                    <Button Click="OnRefreshPortsClick" Content="刷新" />
-                                                </StackPanel>
+                                                    <Button
+                                                        Grid.Column="1"
+                                                        Click="OnRefreshPortsClick"
+                                                        Content="刷新" />
+                                                </Grid>
                                             </StackPanel>
 
-                                            <StackPanel Grid.Column="1" Spacing="4">
+                                            <StackPanel Grid.Column="2" Spacing="4">
                                                 <TextBlock FontSize="12" Opacity="0.7" Text="波特率" />
                                                 <ComboBox x:Name="BaudRateCombo" HorizontalAlignment="Stretch" IsEditable="True">
                                                     <ComboBoxItem Content="9600" />
@@ -203,6 +219,16 @@
                                                     <ComboBoxItem Content="57600" />
                                                     <ComboBoxItem Content="115200" />
                                                 </ComboBox>
+                                            </StackPanel>
+
+                                            <StackPanel Grid.Column="3" Spacing="4">
+                                                <TextBlock FontSize="12" Opacity="0.7" Text="读取超时（毫秒）" />
+                                                <NumberBox
+                                                    x:Name="ReadTimeoutBox"
+                                                    HorizontalAlignment="Stretch"
+                                                    Maximum="10000"
+                                                    Minimum="50"
+                                                    SpinButtonPlacementMode="Compact" />
                                             </StackPanel>
 
                                             <StackPanel Grid.Row="1" Spacing="4">
@@ -226,7 +252,7 @@
                                                 </ComboBox>
                                             </StackPanel>
 
-                                            <StackPanel Grid.Row="2" Spacing="4">
+                                            <StackPanel Grid.Row="1" Grid.Column="2" Spacing="4">
                                                 <TextBlock FontSize="12" Opacity="0.7" Text="停止位" />
                                                 <ComboBox x:Name="StopBitsCombo" HorizontalAlignment="Stretch">
                                                     <ComboBoxItem Content="One" />
@@ -235,17 +261,7 @@
                                                 </ComboBox>
                                             </StackPanel>
 
-                                            <StackPanel Grid.Row="2" Grid.Column="1" Spacing="4">
-                                                <TextBlock FontSize="12" Opacity="0.7" Text="读取超时（毫秒，50–10000）" />
-                                                <NumberBox
-                                                    x:Name="ReadTimeoutBox"
-                                                    HorizontalAlignment="Stretch"
-                                                    Maximum="10000"
-                                                    Minimum="50"
-                                                    SpinButtonPlacementMode="Compact" />
-                                            </StackPanel>
-
-                                            <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="16">
+                                            <StackPanel Grid.Row="2" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="16">
                                                 <ToggleSwitch x:Name="DtrToggle" OffContent="DTR 关" OnContent="DTR 开" />
                                                 <ToggleSwitch x:Name="RtsToggle" OffContent="RTS 关" OnContent="RTS 开" />
                                             </StackPanel>
@@ -257,18 +273,20 @@
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="*" />
                                             </Grid.ColumnDefinitions>
                                             <Grid.RowDefinitions>
                                                 <RowDefinition Height="Auto" />
                                                 <RowDefinition Height="Auto" />
                                             </Grid.RowDefinitions>
 
-                                            <StackPanel Spacing="4">
+                                            <StackPanel Grid.ColumnSpan="2" Spacing="4">
                                                 <TextBlock FontSize="12" Opacity="0.7" Text="主机名或 IP" />
                                                 <TextBox x:Name="TcpHostBox" />
                                             </StackPanel>
 
-                                            <StackPanel Grid.Column="1" Spacing="4">
+                                            <StackPanel Grid.Column="2" Spacing="4">
                                                 <TextBlock FontSize="12" Opacity="0.7" Text="端口（1–65535）" />
                                                 <NumberBox
                                                     x:Name="TcpPortBox"
@@ -305,6 +323,8 @@
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="*" />
                                             </Grid.ColumnDefinitions>
                                             <Grid.RowDefinitions>
                                                 <RowDefinition Height="Auto" />
@@ -313,17 +333,17 @@
                                                 <RowDefinition Height="Auto" />
                                             </Grid.RowDefinitions>
 
-                                            <StackPanel Spacing="4">
+                                            <StackPanel Grid.ColumnSpan="4" Spacing="4">
                                                 <TextBlock FontSize="12" Opacity="0.7" Text="监视目录" />
                                                 <TextBox x:Name="FileDirectoryBox" />
                                             </StackPanel>
 
-                                            <StackPanel Grid.Column="1" Spacing="4">
+                                            <StackPanel Grid.Row="1" Spacing="4">
                                                 <TextBlock FontSize="12" Opacity="0.7" Text="文件匹配模式" />
                                                 <TextBox x:Name="FilePatternBox" PlaceholderText="*.*" />
                                             </StackPanel>
 
-                                            <StackPanel Grid.Row="1" Spacing="4">
+                                            <StackPanel Grid.Row="1" Grid.Column="1" Spacing="4">
                                                 <TextBlock FontSize="12" Opacity="0.7" Text="稳定判定（秒）" />
                                                 <NumberBox
                                                     x:Name="StableSecondsBox"
@@ -334,7 +354,7 @@
                                                     SpinButtonPlacementMode="Compact" />
                                             </StackPanel>
 
-                                            <StackPanel Grid.Row="1" Grid.Column="1" Spacing="4">
+                                            <StackPanel Grid.Row="1" Grid.Column="2" Spacing="4">
                                                 <TextBlock FontSize="12" Opacity="0.7" Text="轮询间隔（秒）" />
                                                 <NumberBox
                                                     x:Name="PollIntervalBox"
@@ -345,12 +365,12 @@
                                                     SpinButtonPlacementMode="Compact" />
                                             </StackPanel>
 
-                                            <StackPanel Grid.Row="2" Spacing="4">
+                                            <StackPanel Grid.Row="2" Grid.ColumnSpan="4" Spacing="4">
                                                 <TextBlock FontSize="12" Opacity="0.7" Text="归档目录" />
                                                 <TextBox x:Name="ArchiveDirectoryBox" />
                                             </StackPanel>
 
-                                            <StackPanel Grid.Row="2" Grid.Column="1" Spacing="4">
+                                            <StackPanel Grid.Row="3" Grid.ColumnSpan="4" Spacing="4">
                                                 <TextBlock FontSize="12" Opacity="0.7" Text="错误目录" />
                                                 <TextBox x:Name="ErrorDirectoryBox" />
                                             </StackPanel>
@@ -361,6 +381,7 @@
 
                                     <Grid ColumnSpacing="12" RowSpacing="10">
                                         <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="*" />
@@ -405,6 +426,8 @@
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="*" />
                                             </Grid.ColumnDefinitions>
 
                                             <StackPanel Spacing="4">
@@ -412,7 +435,7 @@
                                                 <TextBox x:Name="DelimiterBox" PlaceholderText="\r\n" />
                                             </StackPanel>
 
-                                            <StackPanel Grid.Column="1" Spacing="4">
+                                            <StackPanel Grid.Column="1" Grid.ColumnSpan="3" Spacing="4">
                                                 <TextBlock FontSize="12" Opacity="0.7" Text="正则解析（命名组转为字段，可留空）" />
                                                 <TextBox x:Name="ParsePatternBox" PlaceholderText="^RESULT,FORCE=(?&lt;force&gt;\d+\.\d+)N" />
                                             </StackPanel>
@@ -432,6 +455,8 @@
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="*" />
                                             </Grid.ColumnDefinitions>
 
                                             <StackPanel Spacing="4">
@@ -439,7 +464,7 @@
                                                 <TextBox x:Name="CsvDelimiterBox" />
                                             </StackPanel>
 
-                                            <StackPanel Grid.Column="1" Spacing="4">
+                                            <StackPanel Grid.Column="1" Grid.ColumnSpan="3" Spacing="4">
                                                 <TextBlock FontSize="12" Opacity="0.7" Text="表头" />
                                                 <CheckBox
                                                     x:Name="CsvHasHeaderCheck"
@@ -520,6 +545,7 @@
                                                 <ComboBoxItem Content="wsClient" />
                                                 <ComboBoxItem Content="wsServer" />
                                                 <ComboBoxItem Content="rabbitmq" />
+                                                <ComboBoxItem Content="kafka" />
                                             </ComboBox>
                                         </StackPanel>
                                     </Grid>
@@ -535,14 +561,16 @@
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="*" />
                                             </Grid.ColumnDefinitions>
 
-                                            <StackPanel Spacing="4">
+                                            <StackPanel Grid.ColumnSpan="2" Spacing="4">
                                                 <TextBlock FontSize="12" Opacity="0.7" Text="监听地址（仅回环，如 127.0.0.1）" />
                                                 <TextBox x:Name="WsBindBox" PlaceholderText="127.0.0.1" />
                                             </StackPanel>
 
-                                            <StackPanel Grid.Column="1" Spacing="4">
+                                            <StackPanel Grid.Column="2" Spacing="4">
                                                 <TextBlock FontSize="12" Opacity="0.7" Text="监听端口（1–65535）" />
                                                 <NumberBox
                                                     x:Name="WsPortBox"
@@ -585,14 +613,16 @@
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="*" />
                                             </Grid.ColumnDefinitions>
 
-                                            <StackPanel Spacing="4">
+                                            <StackPanel Grid.ColumnSpan="2" Spacing="4">
                                                 <TextBlock FontSize="12" Opacity="0.7" Text="主机名或 IP" />
                                                 <TextBox x:Name="MqHostBox" PlaceholderText="127.0.0.1" />
                                             </StackPanel>
 
-                                            <StackPanel Grid.Column="1" Spacing="4">
+                                            <StackPanel Grid.Column="2" Spacing="4">
                                                 <TextBlock FontSize="12" Opacity="0.7" Text="端口（默认 5672）" />
                                                 <NumberBox
                                                     x:Name="MqPortBox"
@@ -649,7 +679,7 @@
                                         </Grid>
 
                                         <StackPanel Spacing="4">
-                                            <TextBlock FontSize="12" Opacity="0.7" Text="路由键模板（占位符：{agentId} {deviceId} {deviceType}）" />
+                                            <TextBlock FontSize="12" Opacity="0.7" Text="路由键模板（占位符：{agentId} {deviceId}）" />
                                             <TextBox x:Name="MqRoutingKeyBox" PlaceholderText="device.{deviceId}" />
                                         </StackPanel>
 
@@ -659,16 +689,86 @@
                                         </StackPanel>
                                     </StackPanel>
 
+                                    <StackPanel x:Name="KafkaSinkFields" Spacing="10" Visibility="Collapsed">
+                                        <Grid ColumnSpacing="12">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+
+                                            <StackPanel Spacing="4">
+                                                <TextBlock FontSize="12" Opacity="0.7" Text="Bootstrap Servers（逗号分隔 host:port）" />
+                                                <TextBox x:Name="KafkaBootstrapBox" PlaceholderText="127.0.0.1:9092" />
+                                            </StackPanel>
+
+                                            <StackPanel Grid.Column="1" Spacing="4">
+                                                <TextBlock FontSize="12" Opacity="0.7" Text="主题（占位符：{agentId} {deviceId}）" />
+                                                <TextBox x:Name="KafkaTopicBox" PlaceholderText="devices.{deviceId}" />
+                                            </StackPanel>
+                                        </Grid>
+
+                                        <StackPanel Spacing="4">
+                                            <TextBlock FontSize="12" Opacity="0.7" Text="消息键模板（默认 {agentId}:{deviceId}，同名键进入同一分区）" />
+                                            <TextBox x:Name="KafkaMessageKeyBox" PlaceholderText="如 {agentId}:{deviceId}" />
+                                        </StackPanel>
+
+                                        <Grid ColumnSpacing="12">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+
+                                            <StackPanel Spacing="4">
+                                                <TextBlock FontSize="12" Opacity="0.7" Text="安全协议（plaintext / ssl / saslPlaintext / saslSsl）" />
+                                                <ComboBox x:Name="KafkaSecurityProtocolCombo" HorizontalAlignment="Stretch" IsEditable="True">
+                                                    <ComboBoxItem Content="plaintext" />
+                                                    <ComboBoxItem Content="ssl" />
+                                                    <ComboBoxItem Content="saslPlaintext" />
+                                                    <ComboBoxItem Content="saslSsl" />
+                                                </ComboBox>
+                                            </StackPanel>
+
+                                            <StackPanel Grid.Column="1" Spacing="4">
+                                                <TextBlock FontSize="12" Opacity="0.7" Text="SASL 机制（plain / scramSha256 / scramSha512）" />
+                                                <ComboBox x:Name="KafkaSaslMechanismCombo" HorizontalAlignment="Stretch" IsEditable="True">
+                                                    <ComboBoxItem Content="plain" />
+                                                    <ComboBoxItem Content="scramSha256" />
+                                                    <ComboBoxItem Content="scramSha512" />
+                                                </ComboBox>
+                                            </StackPanel>
+                                        </Grid>
+
+                                        <Grid ColumnSpacing="12">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+
+                                            <StackPanel Spacing="4">
+                                                <TextBlock FontSize="12" Opacity="0.7" Text="SASL 用户名" />
+                                                <TextBox x:Name="KafkaSaslUsernameBox" />
+                                            </StackPanel>
+
+                                            <StackPanel Grid.Column="1" Spacing="4">
+                                                <TextBlock FontSize="12" Opacity="0.7" Text="SASL 密码" />
+                                                <PasswordBox x:Name="KafkaSaslPasswordBox" />
+                                            </StackPanel>
+                                        </Grid>
+
+                                        <StackPanel Spacing="4">
+                                            <TextBlock FontSize="12" Opacity="0.7" Text="SSL CA 证书路径（可选，ssl / saslSsl 时使用）" />
+                                            <TextBox x:Name="KafkaSslCaLocationBox" />
+                                        </StackPanel>
+                                    </StackPanel>
+
                                     <StackPanel x:Name="ReliableSinkFields" Spacing="10">
                                         <Grid ColumnSpacing="12" RowSpacing="10">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="*" />
                                             </Grid.ColumnDefinitions>
-                                            <Grid.RowDefinitions>
-                                                <RowDefinition Height="Auto" />
-                                                <RowDefinition Height="Auto" />
-                                            </Grid.RowDefinitions>
 
                                             <StackPanel Spacing="4">
                                                 <TextBlock FontSize="12" Opacity="0.7" Text="重连最小间隔（秒）" />
@@ -690,7 +790,7 @@
                                                     SpinButtonPlacementMode="Compact" />
                                             </StackPanel>
 
-                                            <StackPanel Grid.Row="1" Spacing="4">
+                                            <StackPanel Grid.Column="2" Spacing="4">
                                                 <TextBlock FontSize="12" Opacity="0.7" Text="单设备 spool 分段（MB）" />
                                                 <NumberBox
                                                     x:Name="SpoolSegmentBox"
@@ -700,7 +800,7 @@
                                                     SpinButtonPlacementMode="Compact" />
                                             </StackPanel>
 
-                                            <StackPanel Grid.Row="1" Grid.Column="1" Spacing="4">
+                                            <StackPanel Grid.Column="3" Spacing="4">
                                                 <TextBlock FontSize="12" Opacity="0.7" Text="单设备 spool 配额（MB）" />
                                                 <NumberBox
                                                     x:Name="SpoolMaxBox"
@@ -722,14 +822,13 @@
 
                         <ScrollViewer x:Name="ConfigAgentPanel" VerticalScrollBarVisibility="Auto" Visibility="Collapsed">
                             <StackPanel Padding="0,0,12,0" Spacing="12">
-                                <TextBlock FontWeight="SemiBold" Text="Agent 信息" />
-
                                 <Grid ColumnSpacing="12" RowSpacing="10">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="*" />
                                     </Grid.ColumnDefinitions>
                                     <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition Height="Auto" />
                                     </Grid.RowDefinitions>
@@ -744,55 +843,84 @@
                                         <TextBox x:Name="AgentDisplayNameBox" />
                                     </StackPanel>
 
-                                    <StackPanel Grid.Row="1" Spacing="4">
+                                    <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Spacing="4">
                                         <TextBlock FontSize="12" Opacity="0.7" Text="状态目录（只读）" />
                                         <TextBox x:Name="AgentStateDirectoryText" IsReadOnly="True" />
                                     </StackPanel>
 
-                                    <StackPanel Grid.Row="1" Grid.Column="1" Spacing="4">
-                                        <TextBlock FontSize="12" Opacity="0.7" Text="托盘（只读）" />
-                                        <TextBox x:Name="AgentTrayText" IsReadOnly="True" />
+                                    <StackPanel Grid.Row="2" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="24">
+                                        <ToggleSwitch
+                                            x:Name="AgentTrayToggle"
+                                            Header="托盘"
+                                            OffContent="停用"
+                                            OnContent="启用" />
+                                        <ToggleSwitch
+                                            x:Name="StartWithWindowsToggle"
+                                            Header="开机自启"
+                                            OffContent="关闭"
+                                            OnContent="开启"
+                                            Toggled="OnStartWithWindowsToggled" />
                                     </StackPanel>
                                 </Grid>
 
                                 <TextBlock
                                     FontSize="12"
                                     Opacity="0.6"
-                                    Text="本机 WebSocket 监听地址、令牌与 Origin 白名单已归属到各 wsServer 出口，请在“出口”页配置。agent.id、stateDirectory 修改后需要重启，界面暂不提供编辑。"
+                                    Text="本机 WebSocket 监听地址、令牌与 Origin 白名单已归属到各 wsServer 出口，请在“出口”页配置。agent.id、stateDirectory 修改后需要重启，界面暂不提供编辑；托盘开关在下次启动时生效。"
+                                    TextWrapping="Wrap" />
+
+                                <TextBlock
+                                    FontSize="12"
+                                    Opacity="0.6"
+                                    Text="登录 Windows 后由守护进程拉起并只驻留托盘；主程序异常退出会自动重启，托盘“退出”会同时结束守护进程。"
                                     TextWrapping="Wrap" />
                             </StackPanel>
                         </ScrollViewer>
                     </Grid>
 
-                    <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Spacing="8">
-                        <InfoBar x:Name="ConfigInfoBar" IsClosable="True" IsOpen="False" />
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Button
-                                x:Name="SaveConfigButton"
-                                Click="OnSaveConfigClick"
-                                Content="保存并应用"
-                                Style="{StaticResource AccentButtonStyle}" />
-                            <Button
-                                x:Name="NewConfigButton"
-                                Click="OnNewConfigClick"
-                                Content="新建默认配置"
-                                Visibility="Collapsed" />
-                            <Button Click="OnReloadEditorClick" Content="从磁盘重新载入" />
-                            <Button Click="OnOpenConfigClick" Content="打开配置文件" />
-                            <TextBlock
-                                x:Name="SaveStatusText"
-                                VerticalAlignment="Center"
-                                Opacity="0.7" />
-                        </StackPanel>
+                    <StackPanel
+                        Grid.Row="1"
+                        Grid.ColumnSpan="2"
+                        Orientation="Horizontal"
+                        Spacing="8">
+                        <Button
+                            x:Name="SaveConfigButton"
+                            Click="OnSaveConfigClick"
+                            Content="保存并应用"
+                            Style="{StaticResource AccentButtonStyle}" />
+                        <Button
+                            x:Name="NewConfigButton"
+                            Click="OnNewConfigClick"
+                            Content="新建默认配置"
+                            Visibility="Collapsed" />
+                        <Button Click="OnReloadEditorClick" Content="从磁盘重新载入" />
+                        <Button Click="OnOpenConfigClick" Content="打开配置文件" />
+                        <TextBlock
+                            x:Name="SaveStatusText"
+                            VerticalAlignment="Center"
+                            Opacity="0.7" />
                     </StackPanel>
                 </Grid>
             </TabViewItem>
         </TabView>
 
-        <StackPanel Grid.Row="3" Spacing="2">
-            <TextBlock x:Name="ConfigText" FontSize="12" Opacity="0.7" TextWrapping="Wrap" />
-            <TextBlock x:Name="ReloadText" FontSize="12" Opacity="0.7" TextWrapping="Wrap" />
-            <TextBlock FontSize="12" Opacity="0.5" Text="关闭窗口将最小化到托盘；退出请使用托盘菜单。" />
-        </StackPanel>
+        <TextBlock
+            x:Name="ConfigText"
+            Grid.Row="3"
+            Margin="24,0,24,12"
+            FontSize="12"
+            Opacity="0.7"
+            TextWrapping="Wrap" />
+
+        <InfoBar
+            x:Name="ConfigInfoBar"
+            Grid.Row="2"
+            MaxWidth="440"
+            Margin="0,0,18,16"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Bottom"
+            Canvas.ZIndex="100"
+            IsClosable="True"
+            IsOpen="False" />
     </Grid>
 </Window>

@@ -5,34 +5,17 @@ namespace Sim.DeviceAgent.WebSockets;
 
 public sealed class ClientSubscription
 {
-    public static readonly ClientSubscription All = new([], []);
+    public static readonly ClientSubscription All = new([]);
 
-    public ClientSubscription(
-        IEnumerable<string>? devices,
-        IEnumerable<string>? types)
+    public ClientSubscription(IEnumerable<string>? devices)
     {
         Devices = new HashSet<string>(devices ?? [], StringComparer.OrdinalIgnoreCase);
-        Types = new HashSet<string>(types ?? [], StringComparer.OrdinalIgnoreCase);
     }
 
     public HashSet<string> Devices { get; }
 
-    public HashSet<string> Types { get; }
-
     public bool Matches(MessageEnvelope envelope)
-    {
-        if (Devices.Count > 0 && (envelope.DeviceId is null || !Devices.Contains(envelope.DeviceId)))
-        {
-            return false;
-        }
-
-        if (Types.Count > 0 && (envelope.DeviceType is null || !Types.Contains(envelope.DeviceType)))
-        {
-            return false;
-        }
-
-        return true;
-    }
+        => Devices.Count == 0 || (envelope.DeviceId is not null && Devices.Contains(envelope.DeviceId));
 
     public static ClientSubscription FromJson(JsonElement? element)
     {
@@ -41,9 +24,7 @@ public sealed class ClientSubscription
             return All;
         }
 
-        return new ClientSubscription(
-            ReadSet(subscription, "devices"),
-            ReadSet(subscription, "types"));
+        return new ClientSubscription(ReadSet(subscription, "devices"));
     }
 
     private static IEnumerable<string> ReadSet(JsonElement element, string propertyName)

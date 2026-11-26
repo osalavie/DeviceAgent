@@ -98,6 +98,18 @@ public static class AgentConfigWriter
                 AppendReliableSinkFields(model, sink, baseDirectory);
                 break;
 
+            case "kafka":
+                model.BootstrapServers = sink.BootstrapServers;
+                model.Topic = sink.Topic;
+                model.MessageKey = Optional(sink.MessageKey, "{agentId}:{deviceId}");
+                model.SecurityProtocol = Optional(sink.SecurityProtocol, "plaintext");
+                model.SaslMechanism = Optional(sink.SaslMechanism, "plain");
+                model.SaslUsername = Optional(sink.SaslUsername);
+                model.SaslPassword = Optional(sink.SaslPassword);
+                model.SslCaLocation = Optional(sink.SslCaLocation);
+                AppendReliableSinkFields(model, sink, baseDirectory);
+                break;
+
             default:
                 model.Url = sink.Url;
                 model.Token = Optional(sink.Token);
@@ -125,7 +137,6 @@ public static class AgentConfigWriter
             DeviceId = device.DeviceId,
             Enabled = device.Enabled ? null : false,
             Type = type,
-            DeviceType = device.DeviceType,
             DeviceName = device.DeviceName,
             QueueCapacity = device.QueueCapacity == DefaultQueueCapacity ? null : device.QueueCapacity,
             Sinks = device.Sinks?.ToList() ?? [],
@@ -284,6 +295,22 @@ public static class AgentConfigWriter
 
         public bool? Persistent { get; set; }
 
+        public string? BootstrapServers { get; set; }
+
+        public string? Topic { get; set; }
+
+        public string? MessageKey { get; set; }
+
+        public string? SecurityProtocol { get; set; }
+
+        public string? SaslMechanism { get; set; }
+
+        public string? SaslUsername { get; set; }
+
+        public string? SaslPassword { get; set; }
+
+        public string? SslCaLocation { get; set; }
+
         public int? ReconnectMinSeconds { get; set; }
 
         public int? ReconnectMaxSeconds { get; set; }
@@ -302,8 +329,6 @@ public static class AgentConfigWriter
         public bool? Enabled { get; set; }
 
         public string Type { get; set; } = string.Empty;
-
-        public string DeviceType { get; set; } = string.Empty;
 
         public string DeviceName { get; set; } = string.Empty;
 

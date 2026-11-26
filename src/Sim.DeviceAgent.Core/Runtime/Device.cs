@@ -66,14 +66,13 @@ public sealed class Device : IAsyncDisposable
 
     public string DeviceId => _config.DeviceId;
 
-    public string DeviceType => _config.DeviceType;
-
     public string DeviceName => _config.DeviceName;
 
     public string Type => _config.Type;
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
+        _logger.LogInformation("Starting device {DeviceId} ({Transport}).", DeviceId, _config.Type);
         UpdateState(TransportState.Connecting, null);
         await PublishStatusAsync(cancellationToken);
 
@@ -164,7 +163,6 @@ public sealed class Device : IAsyncDisposable
         {
             return new DeviceStatus(
                 _config.DeviceId,
-                _config.DeviceType,
                 _config.DeviceName,
                 _config.Type,
                 _state,
@@ -184,6 +182,7 @@ public sealed class Device : IAsyncDisposable
             return;
         }
 
+        _logger.LogInformation("Stopping device {DeviceId}.", DeviceId);
         _cts.Cancel();
         Volatile.Read(ref _pendingCommand)?.Completion.TrySetException(new OperationCanceledException("The device is stopping."));
 
@@ -234,6 +233,12 @@ public sealed class Device : IAsyncDisposable
                 return await HandleFileAsync(file, cancellationToken);
 
             case TransportStateChanged state:
+                if (state.State is TransportState.Connected)
+                {
+                    // 新连接：丢弃上一段连接中未拼完的半帧，避免与新数据拼接。
+                    _decoder = null;
+                }
+
                 UpdateState(state.State, state.Detail);
                 await PublishStatusAsync(cancellationToken);
                 return TransportEventResult.Ok;
@@ -386,7 +391,6 @@ public sealed class Device : IAsyncDisposable
             Type = MessageTypes.Data,
             AgentId = _agentId,
             DeviceId = _config.DeviceId,
-            DeviceType = _config.DeviceType,
             Seq = seq,
             Ts = timestamp,
             Raw = Convert.ToBase64String(item.Frame.Raw),
@@ -442,7 +446,6 @@ public sealed class Device : IAsyncDisposable
             Type = MessageTypes.Status,
             AgentId = _agentId,
             DeviceId = status.DeviceId,
-            DeviceType = status.DeviceType,
             Seq = status.Seq,
             Ts = DateTimeOffset.UtcNow,
             State = status.State,
@@ -504,6 +507,12 @@ public sealed class Device : IAsyncDisposable
                 _lastError = null;
             }
         }
+
+        _logger.LogInformation(
+            "Device {DeviceId} transport state -> {State}{Detail}",
+            DeviceId,
+            state.ToString().ToLowerInvariant(),
+            string.IsNullOrWhiteSpace(detail) ? string.Empty : $": {detail}");
     }
 
     private sealed record QueuedFrame(DecodedFrame Frame, FileRef? FileRef);

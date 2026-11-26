@@ -21,7 +21,5 @@
 
   <ItemGroup>
     <None Include="..\..\src\Sim.DeviceAgent.App\agent.example.json" Link="agent.example.json" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="..\..\src\Sim.DeviceAgent.App\agent.center.example.json" Link="agent.center.example.json" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="..\..\src\Sim.DeviceAgent.App\agent.rabbitmq.example.json" Link="agent.rabbitmq.example.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

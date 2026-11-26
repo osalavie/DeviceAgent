@@ -26,29 +26,6 @@ public sealed class ConfigValidatorTests
     }
 
     [Fact]
-    public void CenterExampleConfig_LoadsAndValidates()
-    {
-        var path = Path.Combine(AppContext.BaseDirectory, "agent.center.example.json");
-
-        var config = AgentConfigLoader.Load(path);
-        var errors = AgentConfigValidator.Validate(config);
-
-        Assert.Empty(errors);
-    }
-
-    [Fact]
-    public void RabbitMqExampleConfig_LoadsAndValidates()
-    {
-        var path = Path.Combine(AppContext.BaseDirectory, "agent.rabbitmq.example.json");
-
-        var config = AgentConfigLoader.Load(path);
-        var errors = AgentConfigValidator.Validate(config);
-
-        Assert.Empty(errors);
-        Assert.Equal("rabbitmq", config.Sinks["mq"].Type);
-    }
-
-    [Fact]
     public void DuplicateDeviceId_IsRejected()
     {
         var config = CreateValidConfig();
@@ -56,7 +33,6 @@ public sealed class ConfigValidatorTests
         {
             DeviceId = "PT-001",
             Type = "file",
-            DeviceType = "pullTest",
             Directory = "./in-2",
             Pattern = "*.csv",
             ArchiveDirectory = "./archive-2",
@@ -82,7 +58,7 @@ public sealed class ConfigValidatorTests
     }
 
     [Fact]
-    public void UnsupportedDeviceType_IsRejected()
+    public void UnsupportedTransportType_IsRejected()
     {
         var config = CreateValidConfig();
         config.Devices[0].Type = "modbus";
@@ -244,6 +220,64 @@ public sealed class ConfigValidatorTests
     }
 
     [Fact]
+    public void ValidKafkaSink_HasNoErrors()
+    {
+        var config = CreateValidConfig();
+        config.Sinks["events"] = new SinkConfig
+        {
+            Type = "kafka",
+            BootstrapServers = "kafka-1.example.com:9092,kafka-2.example.com:9092",
+            Topic = "devices.{deviceId}",
+            MessageKey = "{agentId}:{deviceId}"
+        };
+        config.Devices[0].Sinks = ["local", "events"];
+
+        var errors = AgentConfigValidator.Validate(config);
+
+        Assert.Empty(errors);
+    }
+
+    [Fact]
+    public void KafkaSink_RequiresBootstrapServersTopicAndValidSettings()
+    {
+        var config = CreateValidConfig();
+        config.Sinks["events"] = new SinkConfig
+        {
+            Type = "kafka",
+            BootstrapServers = "bad host:0",
+            Topic = "",
+            SecurityProtocol = "gssapi",
+            SaslMechanism = "kerberos"
+        };
+
+        var errors = AgentConfigValidator.Validate(config);
+
+        Assert.Contains(errors, error => error.Contains("invalid entry", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("requires topic", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("securityProtocol must be", StringComparison.Ordinal));
+        Assert.Contains(errors, error => error.Contains("saslMechanism must be", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void KafkaSink_SaslProtocol_RequiresUserName()
+    {
+        var config = CreateValidConfig();
+        config.Sinks["events"] = new SinkConfig
+        {
+            Type = "kafka",
+            BootstrapServers = "kafka.example.com:9093",
+            Topic = "devices",
+            SecurityProtocol = "saslSsl",
+            SaslMechanism = "scram-sha-256",
+            SaslUsername = ""
+        };
+
+        var errors = AgentConfigValidator.Validate(config);
+
+        Assert.Contains(errors, error => error.Contains("requires saslUsername", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void LegacyLocalWs_IsMigratedIntoWsServerSink()
     {
         var root = Path.Combine(
@@ -272,7 +306,6 @@ public sealed class ConfigValidatorTests
                     {
                       "deviceId": "PT-001",
                       "type": "file",
-                      "deviceType": "pullTest",
                       "directory": "./in",
                       "pattern": "*.csv",
                       "archiveDirectory": "./archive",
@@ -355,7 +388,6 @@ public sealed class ConfigValidatorTests
                 {
                     DeviceId = "PT-001",
                     Type = "file",
-                    DeviceType = "pullTest",
                     DeviceName = "Pull tester file",
                     Directory = "./in",
                     Pattern = "*.csv",

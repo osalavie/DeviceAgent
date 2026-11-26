@@ -117,9 +117,11 @@ public sealed class DeviceAgentRuntime : IHostedService, IAsyncDisposable
         await _lifecycleGate.WaitAsync(CancellationToken.None).ConfigureAwait(false);
         try
         {
+            _logger.LogInformation("Stopping the agent runtime.");
             Volatile.Write(ref _running, 0);
             await StopDevicesAsync(cancellationToken).ConfigureAwait(false);
             await StopSinksAsync(cancellationToken).ConfigureAwait(false);
+            _logger.LogInformation("Agent runtime stopped.");
         }
         finally
         {
@@ -204,9 +206,8 @@ public sealed class DeviceAgentRuntime : IHostedService, IAsyncDisposable
                 await device.StartAsync(cancellationToken).ConfigureAwait(false);
 
                 _logger.LogInformation(
-                    "Started device {DeviceId} (type={DeviceType}, transport={TransportType}, sinks={Sinks}).",
+                    "Started device {DeviceId} (transport={TransportType}, sinks={Sinks}).",
                     deviceConfig.DeviceId,
-                    deviceConfig.DeviceType,
                     deviceConfig.Type,
                     string.Join(",", deviceSinks.Select(sink => sink.Id)));
             }
@@ -280,6 +281,11 @@ public sealed class DeviceAgentRuntime : IHostedService, IAsyncDisposable
                 _config.Agent,
                 _loggerFactory),
             "rabbitmq" => new RabbitMqSink(
+                sinkId,
+                sinkConfig,
+                _config.Agent,
+                _loggerFactory),
+            "kafka" => new KafkaSink(
                 sinkId,
                 sinkConfig,
                 _config.Agent,

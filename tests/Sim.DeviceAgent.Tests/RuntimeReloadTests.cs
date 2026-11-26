@@ -199,7 +199,6 @@ public sealed class RuntimeReloadTests
                 {
                     DeviceId = deviceId,
                     Type = "file",
-                    DeviceType = "pullTest",
                     DeviceName = "Pull tester",
                     Directory = deviceDirectory,
                     Pattern = "*.csv",

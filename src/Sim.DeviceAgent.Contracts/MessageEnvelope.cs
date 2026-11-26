@@ -13,8 +13,6 @@ public sealed class MessageEnvelope
 
     public string? DeviceId { get; set; }
 
-    public string? DeviceType { get; set; }
-
     public long? Seq { get; set; }
 
     public DateTimeOffset? Ts { get; set; }

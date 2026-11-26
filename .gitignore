@@ -8,6 +8,7 @@ artifacts/
 
 # 运行数据
 agent.json
+ui-settings.json
 data/
 *.log
 .smoke-*/

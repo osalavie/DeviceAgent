@@ -50,7 +50,19 @@ public sealed class AgentConfigWriterTests
                         Password = "secret",
                         Exchange = "sim.device-agent",
                         ExchangeType = "topic",
-                        RoutingKey = "device.{deviceType}.{deviceId}"
+                        RoutingKey = "device.{agentId}.{deviceId}"
+                    },
+                    ["events"] = new SinkConfig
+                    {
+                        Type = "kafka",
+                        BootstrapServers = "kafka-1.example.com:9092,kafka-2.example.com:9092",
+                        Topic = "devices.{deviceId}",
+                        MessageKey = "{agentId}:{deviceId}",
+                        SecurityProtocol = "saslSsl",
+                        SaslMechanism = "scramSha256",
+                        SaslUsername = "producer",
+                        SaslPassword = "secret",
+                        SslCaLocation = "C:/certs/ca.pem"
                     }
                 },
                 Devices =
@@ -59,7 +71,6 @@ public sealed class AgentConfigWriterTests
                     {
                         DeviceId = "DS-001",
                         Type = "tcp",
-                        DeviceType = "dieShear",
                         DeviceName = "Die shear tester",
                         Host = "192.168.1.50",
                         Port = "5000",
@@ -76,7 +87,7 @@ public sealed class AgentConfigWriterTests
                                 Pattern = "^SHEAR,DIE=(?<dieId>\\S+),FORCE=(?<force>\\d+\\.\\d+)N"
                             }
                         },
-                        Sinks = ["local", "center", "mq"]
+                        Sinks = ["local", "center", "mq", "events"]
                     }
                 ]
             };
@@ -114,17 +125,33 @@ public sealed class AgentConfigWriterTests
             var mqSink = document.RootElement.GetProperty("sinks").GetProperty("mq");
             Assert.Equal("rabbitmq", mqSink.GetProperty("type").GetString());
             Assert.Equal("mq.example.com", mqSink.GetProperty("host").GetString());
-            Assert.Equal("device.{deviceType}.{deviceId}", mqSink.GetProperty("routingKey").GetString());
+            Assert.Equal("device.{agentId}.{deviceId}", mqSink.GetProperty("routingKey").GetString());
+
+            var kafkaSink = document.RootElement.GetProperty("sinks").GetProperty("events");
+            Assert.Equal("kafka", kafkaSink.GetProperty("type").GetString());
+            Assert.Equal(
+                "kafka-1.example.com:9092,kafka-2.example.com:9092",
+                kafkaSink.GetProperty("bootstrapServers").GetString());
+            Assert.Equal("devices.{deviceId}", kafkaSink.GetProperty("topic").GetString());
+            Assert.Equal("saslSsl", kafkaSink.GetProperty("securityProtocol").GetString());
+            Assert.Equal("scramSha256", kafkaSink.GetProperty("saslMechanism").GetString());
+            Assert.False(kafkaSink.TryGetProperty("messageKey", out _));
 
             var loaded = AgentConfigLoader.Load(path);
             Assert.Empty(AgentConfigValidator.Validate(loaded));
-            Assert.Equal(3, loaded.Sinks.Count);
+            Assert.Equal(4, loaded.Sinks.Count);
             Assert.Equal("DS-001", Assert.Single(loaded.Devices).DeviceId);
             Assert.Equal("5000", loaded.Devices[0].Port);
             Assert.Equal("127.0.0.1", loaded.Sinks["local"].Bind);
             Assert.Equal(18080, loaded.Sinks["local"].Port);
             Assert.Equal("mq.example.com", loaded.Sinks["mq"].Host);
             Assert.Equal("secret", loaded.Sinks["mq"].Password);
+            Assert.Equal(
+                "kafka-1.example.com:9092,kafka-2.example.com:9092",
+                loaded.Sinks["events"].BootstrapServers);
+            Assert.Equal("producer", loaded.Sinks["events"].SaslUsername);
+            Assert.Equal("secret", loaded.Sinks["events"].SaslPassword);
+            Assert.Equal("C:/certs/ca.pem", loaded.Sinks["events"].SslCaLocation);
             Assert.Equal(
                 "^SHEAR,DIE=(?<dieId>\\S+),FORCE=(?<force>\\d+\\.\\d+)N",
                 loaded.Devices[0].Codec.Parse?.Pattern);

@@ -1,6 +1,6 @@
 # 设备接入 Agent（多设备：串口/TCP/文件 → WebSocket）设计方案
 
-> 状态：P0 MVP、中心 `wsClient`/spool、配置热加载已实现（2026-11-16）；WinUI3 一体化托盘宿主 P0 已实施（2026-11-20），2026-11-26 增加主窗口“运行状态 / 配置”页签与设备、出口、Agent 的结构化配置编辑，工程拆分为 Core 类库与 WinUI3 应用；同日将 WebSocket 监听地址、令牌与 Origin 归属到各 `wsServer` 出口（支持多个监听地址），并新增 RabbitMQ 生产出口。Windows 服务/自启动、平台侧中心网关与 P2 能力待实施。当前宿主为 Windows 专用，本机模式不需要 TLS 和令牌。实现范围与运行方式见 [`README.md`](../README.md) 与第 17 节。
+> 状态：P0 MVP、中心 `wsClient`/spool、配置热加载已实现（2026-11-16）；WinUI3 一体化托盘宿主 P0 已实施（2026-11-20），2026-11-26 增加主窗口“运行状态 / 配置”页签与设备、出口、Agent 的结构化配置编辑，工程拆分为 Core 类库与 WinUI3 应用；同日将 WebSocket 监听地址、令牌与 Origin 归属到各 `wsServer` 出口（支持多个监听地址），并新增 RabbitMQ 与 Kafka 生产出口；主窗口改为自定义标题栏，登录自启（HKCU Run）与 `--watchdog` 进程守护已实现。Windows 服务形态、平台侧中心网关与 P2 能力待实施。当前宿主为 Windows 专用，本机模式不需要 TLS 和令牌。实现范围与运行方式见 [`README.md`](../README.md) 与第 17 节。
 >
 > 设计日期：2026-11-16
 >
@@ -26,8 +26,8 @@
 
 1. **多种接入方式**：串口、TCP 客户端、TCP 服务端、UDP、文件目录（新增文件、追加文件和整文件读取），预留 HTTP 轮询和厂商 SDK 插件。
 2. **多设备并发与隔离**：一台上位机同时运行多个设备，每台设备独立配置接入方式、解析器、汇与缓冲；单设备离线、解析失败或插件崩溃不影响其他设备。
-3. **多汇出口**：本机 WebSocket 服务端（每个出口独立监听地址，可配置多个）、中心 WebSocket 客户端、RabbitMQ 生产出口，后续扩展 HTTP/MQTT 批量上传；支持一个或多个设备共用一个出口，也支持按设备独立配置。
-4. **配置驱动**：一台设备一条定义「设备 + 接入参数 + 解析器 + 汇」，新增设备类型不修改主程序。
+3. **多汇出口**：本机 WebSocket 服务端（每个出口独立监听地址，可配置多个）、中心 WebSocket 客户端、RabbitMQ 与 Kafka 生产出口，后续扩展 HTTP/MQTT 批量上传；支持一个或多个设备共用一个出口，也支持按设备独立配置。
+4. **配置驱动**：一台设备一条定义「设备 + 接入参数 + 解析器 + 汇」，新增设备接入不修改主程序。
 5. **解析器插件化**：通用格式使用内置解析器；厂商专有二进制、复杂 CSV/XML/Excel 或依赖 SDK 的格式以独立插件交付，不同设备可使用不同插件与版本，可单独升级，故障隔离。
 6. **命令事务**：支持「下发指令 → 等待匹配响应 → 超时失败」的请求/应答模式，覆盖拉力测试机一类设备；同一设备内命令串行执行。
 7. **断线不丢数**：网络中断时本地磁盘缓冲，恢复后按设备按序补传，中心按设备序号与文件记录键去重。
@@ -63,14 +63,15 @@
                                     ├── ws-server（本机页面，每个出口独立监听）
                                     ├── ws-client（中心网关）
                                     ├── rabbitmq（消息中间件生产）
+                                    ├── kafka（消息中间件生产）
                                     ├── http-batch / mqtt（后续）
                                     └── disk spool（按设备分区）
 ```
 
-- **Device**：一台设备就是一条完整接入定义，含 `deviceId`、`deviceType`、接入方式 `type`（`serial`/`tcp`/`file`）、接入参数、解析器与出口；接入适配器是它的内部实现。
+- **Device**：一台设备就是一条完整接入定义，含 `deviceId`、接入方式 `type`（`serial`/`tcp`/`file`）、接入参数、解析器与出口；接入适配器是它的内部实现。
 - **Transport**：设备内部的连接建立、重连、热插拔和原始字节读取；一台设备只使用一条链路，不共用。
 - **Codec**：每设备独立，负责帧/记录切分和可选语义解析，输出原始帧 + 解析结果；内置规则或设备插件。
-- **Router**：按 `deviceId`、`deviceType` 与订阅关系分发，记录每设备序号、时间戳和统计。
+- **Router**：按 `deviceId` 与订阅关系分发，记录每设备序号、时间戳和统计。
 - **Sink**：负责对外传输；出口可被多个设备共享，每个出口内部按设备分区队列，一台设备或一个汇故障不影响其他设备与出口。
 
 隔离原则：每台设备一条独立处理管线、独立接入实例和有界队列；单设备断线、解析慢、队列满或插件崩溃不得阻塞其他设备。
@@ -98,7 +99,7 @@
 | 概念 | 说明 |
 | --- | --- |
 | Agent | 一个进程实例，对应一台上位机或采集机；拥有唯一 `agentId`（默认取首次安装时的主机名，见 3.4），可承载多台设备 |
-| Device | 一台实际测试设备，含 `deviceId`（平台设备编号/编码，见 3.4，同时是唯一键）、`deviceType`（`scale`/`pullTest`/`dieShear` 等）、显示名、接入方式 `type`（`serial`/`tcp`/`file`）与对应接入参数 |
+| Device | 一台实际测试设备，含 `deviceId`（平台设备编号/编码，见 3.4，同时是唯一键）、显示名、接入方式 `type`（`serial`/`tcp`/`file`）与对应接入参数 |
 | Codec | 每设备独立的帧/记录切分与解析规则，可为内置（直通、分隔符、定长、正则、CSV、Modbus）或解析插件 |
 | Parser Plugin | 以独立程序集与进程交付的设备专有格式解析器，按清单注册，可单独升级 |
 | Sink | 出口定义，可被多个设备共享；每个出口内部按设备分区缓冲与重试 |
@@ -122,43 +123,47 @@
     "mq": { "type": "rabbitmq", "host": "mq.example.com", "port": 5672,
             "virtualHost": "/", "userName": "device-agent", "password": "",
             "exchange": "sim.device-agent", "exchangeType": "topic",
-            "routingKey": "device.{deviceType}.{deviceId}" }
+            "routingKey": "device.{deviceId}" },
+    "kafka": { "type": "kafka", "bootstrapServers": "kafka-1.example.com:9092,kafka-2.example.com:9092",
+               "topic": "devices.{deviceId}", "messageKey": "{agentId}:{deviceId}",
+               "securityProtocol": "saslSsl", "saslMechanism": "scramSha256",
+               "saslUsername": "device-agent", "saslPassword": "" }
   },
   "devices": [
-    { "deviceId": "PT-001", "type": "serial", "deviceType": "pullTest",
+    { "deviceId": "PT-001", "type": "serial",
       "deviceName": "焊线拉力测试机 01", "port": "COM3", "baudRate": 9600,
       "dataBits": 8, "parity": "None", "stopBits": "One",
       "codec": { "type": "delimiter", "delimiter": "\r\n", "encoding": "ascii",
                  "parse": { "type": "regex", "pattern": "^RESULT,FORCE=(?<force>\\d+\\.\\d+)N" } },
       "sinks": ["local", "center"] },
-    { "deviceId": "DS-001", "type": "serial", "deviceType": "dieShear",
+    { "deviceId": "DS-001", "type": "serial",
       "deviceName": "Die 焊接推力测试机 01", "port": "COM4", "baudRate": 19200,
       "dataBits": 8, "parity": "Even", "stopBits": "One",
       "codec": { "type": "plugin", "pluginId": "vendor-dieshear", "version": "1.0.0" },
       "sinks": ["center"] },
-    { "deviceId": "PT-002", "type": "file", "deviceType": "pullTest",
+    { "deviceId": "PT-002", "type": "file",
       "deviceName": "焊线拉力测试机 02（文件导出）",
       "directory": "D:/device/in", "pattern": "PT02_*.csv", "stableSeconds": 5,
       "archiveDirectory": "D:/device/archive", "errorDirectory": "D:/device/error",
       "codec": { "type": "csv", "csvDelimiter": ",", "encoding": "utf-8", "hasHeader": true,
                  "columns": { "sampleId": "Sample", "force": "ForceN" } },
-      "sinks": ["center", "mq"] }
+      "sinks": ["center", "mq", "kafka"] }
   ]
 }
 ```
 
-`deviceId` 是唯一键；每台设备直接内嵌接入参数（`type` 判别 `serial`/`tcp`/`file`），不再有独立的源定义与引用。启动校验不通过时拒绝应用整份配置。示例展示目标配置；`wsServer`/`wsClient`/`rabbitmq` 已实现，`plugin` 解析器与 `spool.maxDays` 属后续阶段。可运行字段以 [`agent.example.json`](../src/Sim.DeviceAgent.App/agent.example.json)、[`agent.center.example.json`](../src/Sim.DeviceAgent.App/agent.center.example.json)、[`agent.rabbitmq.example.json`](../src/Sim.DeviceAgent.App/agent.rabbitmq.example.json) 和 [`README.md`](../README.md) 为准，差异见第 17 节。
+`deviceId` 是唯一键；每台设备直接内嵌接入参数（`type` 判别 `serial`/`tcp`/`file`），不再有独立的源定义与引用。启动校验不通过时拒绝应用整份配置。示例展示目标配置；`wsServer`/`wsClient`/`rabbitmq`/`kafka` 已实现，`plugin` 解析器与 `spool.maxDays` 属后续阶段。可运行字段以 [`agent.example.json`](../src/Sim.DeviceAgent.App/agent.example.json) 和 [`README.md`](../README.md) 为准，差异见第 17 节。该示例与首次启动自动生成的默认配置结构一致，仅使用本机 `wsServer` 与文件设备；串口/TCP、`wsClient`、`rabbitmq` 与 `kafka` 的字段说明见下文与 README。
 
 示例中的 `agent.id` 为显式配置值；未配置时默认取首次安装时的机器名，`agentId` 与 `deviceId` 的命名规则见 3.4。
 
 ### 3.3 配置管理
 
 - 以本地 `agent.json` 为唯一运行时事实，文件监听热加载；当前实现是校验通过后停止全部设备/出口并按新配置重建，设备序号与 spool 保留，重载期间所有设备短暂中断。`wsServer` 出口会按新的监听地址重新绑定，因此地址/端口变更同样即时生效。后续可按设备粒度增量应用。
-- 校验规则：`agentId`、`deviceId` 唯一；`type` 属于 `serial`/`tcp`/`file`；接入字段、`codec` 与 Sink 引用有效；`wsServer` 必须提供回环 `bind` 与 `port`，多个 `wsServer` 不得复用同一 `bind:port`；`rabbitmq` 必须提供主机、交换机与路由键；超时与缓冲参数在允许范围。
+- 校验规则：`agentId`、`deviceId` 唯一；`type` 属于 `serial`/`tcp`/`file`；接入字段、`codec` 与 Sink 引用有效；`wsServer` 必须提供回环 `bind` 与 `port`，多个 `wsServer` 不得复用同一 `bind:port`；`rabbitmq` 必须提供主机、交换机与路由键；`kafka` 必须提供 bootstrapServers 与 topic，SASL 协议下需要用户名；超时与缓冲参数在允许范围。
 - 不可热改字段：`agent.id`、`agent.stateDirectory` 和托盘启用状态；修改时拒绝重载并提示重启。
 - 应用策略：校验全部通过后应用；失败时保留上一份有效配置，错误写入 `/api/status` 的 `config.lastError`。
 - 中心统一下发（P2）只覆盖「期望配置」，Agent 保留本地 `base` 与下发 `override`，断网时继续运行最后有效配置。
-- 敏感值不写入日志；中心令牌与 RabbitMQ 凭据当前以明文写入 `agent.json`（后续通过 `credentialRef` 引用本机加密存储）。旧版 `agent.localWs` 在加载时迁移到 `local`（或第一个）`wsServer` 出口，保存时按新结构重写。
+- 敏感值不写入日志；中心令牌、RabbitMQ 凭据与 Kafka SASL 凭据当前以明文写入 `agent.json`（后续通过 `credentialRef` 引用本机加密存储）。旧版 `agent.localWs` 在加载时迁移到 `local`（或第一个）`wsServer` 出口，保存时按新结构重写。
 
 ### 3.4 身份与命名约定
 
@@ -172,7 +177,7 @@
 
 #### deviceId
 
-- 取值：使用平台设备台账中的设备编号/编码（如 `PT-001`、`DS-002`），不使用 `COM3` 等接口名或自增整数；纯数字编号必须加设备类型前缀或采用「类型-编号」复合。
+- 取值：使用平台设备台账中的设备编号/编码（如 `PT-001`、`DS-002`），不使用 `COM3` 等接口名或自增整数；纯数字编号必须加前缀或采用「前缀-编号」复合。
 - 唯一性：同一 `agentId` 下唯一，平台按 `agentId + deviceId` 登记；禁止仅大小写不同的两个 ID。
 - 稳定性：设备更换但编号不变时数据保持连续；硬件序列号写入设备元数据或解析结果用于追溯，不作为设备身份。
 - 多工位：同一台设备有多个测试工位时使用后缀（如 `DS-001-S1`）或后续增加 `stationId`（见 Q-10）；`deviceId` 在同一 Agent 内全局唯一，直接作为订阅、命令与状态键。
@@ -239,7 +244,7 @@
 - 运行方式：独立进程，通过 stdio JSON-RPC（命名管道可选）与主进程通信；主进程不加载第三方 DLL，插件崩溃只使当前设备进入 `degraded` 并自动重启，不影响其他设备。默认每设备独立插件进程；资源评估通过后可配置共享进程，但共享进程崩溃会影响引用它的设备。
 - 设备归属：解析器只处理其所属设备的帧或文件，不得输出其他设备的数据；若上游确实聚合了多台设备，先由网关拆分后再接入。
 - 批量边界：高频帧按 50 ms 或 100 条聚合后批量交给插件，避免逐帧 IPC；文件解析支持流式输入，避免整文件驻留内存。
-- 插件清单：`id`、`version`、`apiVersion`、`kind`、支持的 `deviceTypes` 与扩展名/魔数、目标平台与位数、入口、SHA-256 与签名。配置以 `pluginId@version` 引用，升级需显式切换版本。
+- 插件清单：`id`、`version`、`apiVersion`、`kind`、支持的扩展名/魔数、目标平台与位数、入口、SHA-256 与签名。配置以 `pluginId@version` 引用，升级需显式切换版本。
 - 交付与测试：每个插件必须附带样例文件与期望输出（golden files），并声明资源上限（内存、CPU 时间、单次解析超时）；插件版本变化时只重启对应设备，不影响其他设备。
 - 内置与插件的边界：分隔符、正则、定长、CSV、Modbus 等通用格式内置；厂商私有二进制、复杂 Excel/XML 结构、需要调用 SDK 的格式放插件。
 
@@ -261,7 +266,6 @@
 | `type` | string | `hello`/`helloAck`/`subscribe`/`data`/`status`/`event`/`command`/`response`/`error`/`ping`/`pong` |
 | `agentId` | string | Agent 唯一标识，默认取首次安装主机名（见 3.4） |
 | `deviceId` | string | 平台设备编号/编码，作为设备台账主键；同一 `agentId` 下唯一（见 3.4） |
-| `deviceType` | string | `scale`/`pullTest`/`dieShear` 等，由设备配置决定 |
 | `seq` | long | 设备内单调递增，重连与设备重建不清零 |
 | `ts` | string | Agent 接收时刻（ISO 8601 带时区）；设备自带时间放 `parsed` |
 | `raw` | string | 原始帧 Base64 |
@@ -278,7 +282,7 @@
 
 ```json
 { "v": 1, "type": "data", "agentId": "LINE-A-PC01",
-  "deviceId": "SC-001", "deviceType": "scale",
+  "deviceId": "SC-001",
   "seq": 1024, "ts": "2026-11-16T08:15:30.123+08:00",
   "raw": "U1QsR1MsKzAwMTIuMzQ1a2cNCg==", "text": "ST,GS,+0012.345kg\r\n",
   "parsed": { "state": "GS", "sign": "+", "value": 12.345, "unit": "kg" } }
@@ -288,14 +292,14 @@
 
 ```json
 { "v": 1, "type": "command", "agentId": "LINE-A-PC01",
-  "deviceId": "PT-001", "deviceType": "pullTest",
+  "deviceId": "PT-001",
   "requestId": "r-20261116-0007", "op": "send",
   "payload": { "text": "READ\r\n", "timeoutMs": 2000, "match": { "type": "regex", "pattern": "^RESULT.+" } } }
 ```
 
 ```json
 { "v": 1, "type": "response", "agentId": "LINE-A-PC01",
-  "deviceId": "PT-001", "deviceType": "pullTest",
+  "deviceId": "PT-001",
   "requestId": "r-20261116-0007", "ok": true, "seq": 88, "ts": "2026-11-16T08:16:02.501+08:00",
   "text": "RESULT,FORCE=12.34N\r\n", "parsed": { "force": 12.34, "unit": "N" } }
 ```
@@ -304,7 +308,7 @@ Die 推力测试数据（同一上位机、不同解析插件）：
 
 ```json
 { "v": 1, "type": "data", "agentId": "LINE-A-PC01",
-  "deviceId": "DS-001", "deviceType": "dieShear",
+  "deviceId": "DS-001",
   "seq": 512, "ts": "2026-11-16T08:17:10.020+08:00",
   "raw": "AAECAwQ=", "parsed": { "dieId": "D-0231", "shearForce": 8.76, "unit": "N", "result": "PASS" } }
 ```
@@ -315,7 +319,7 @@ Die 推力测试数据（同一上位机、不同解析插件）：
 
 - 每个 `wsServer` 出口独立监听自己的 `bind:port`，只允许回环地址，不监听 `0.0.0.0`；多个出口可同时监听不同地址/端口（也可用不同端口划分页面与命令面）。
 - 浏览器 WebSocket 无法自定义请求头，因此连接后首条消息必须发送 `hello`（含订阅列表；该出口配置了令牌时再带令牌），3 秒内未完成握手则断开。
-- 订阅列表支持按 `deviceId`、`deviceType` 过滤；同一页面可只订阅当前工位需要的设备，避免一台上位机多设备的数据混杂。
+- 订阅列表支持按 `deviceId` 过滤；同一页面可只订阅当前工位需要的设备，避免一台上位机多设备的数据混杂。
 - 校验 `Origin` 是否在该出口的 `allowedOrigins` 内；浏览器握手一定携带 `Origin`，非浏览器客户端无 `Origin` 时允许连接。
 - 单机模式推荐 `wsServer.token` 留空，仅依赖回环监听与 Origin 白名单；需要额外边界时再配置静态令牌。P2 可改为 Agent 校验平台 JWT（配置中心 JWKS、issuer、audience）。
 - 未完成握手的连接不接收任何数据，也不响应命令。
@@ -334,6 +338,7 @@ Die 推力测试数据（同一上位机、不同解析插件）：
 | 本机 ws-server | 丢弃该设备最旧数据并累加 `dropped` 计数 | 实时预览优先，页面可按设备重新订阅 |
 | 中心 ws-client | 写入该设备的 spool 分区，不丢数据 | 该设备 spool 达到配额才拒绝并置 `faulted`，产生告警 |
 | RabbitMQ | 写入该设备的 spool 分区，发布确认后推进水位 | 与中心出口使用同一缓冲策略；Broker 不可达时持续积压 |
+| Kafka | 写入该设备的 spool 分区，Broker 确认（acks=all）后推进水位 | 与 RabbitMQ 使用同一缓冲策略；Broker 不可达时持续积压；消息键按设备分区保序 |
 | HTTP/MQTT | 批量重试 + 按设备 spool 分区 | 与中心出口使用同一缓冲策略 |
 
 所有出口队列按设备再分区：单设备积压、断线或订阅端消费慢只影响该设备，不挤占同一出口的其他设备。
@@ -404,7 +409,7 @@ Die 推力测试数据（同一上位机、不同解析插件）：
 
 - 发布形态：由 `scripts/publish.ps1` / `publish.sh` 执行 `dotnet publish`，默认单文件自包含 `win-x64`（可裁剪），同时提供目录发布和框架依赖版用于内网统一运行时环境。
 - 安装形态：当前为 WinUI3 桌面应用（原生 Win32 `Shell_NotifyIcon` 托盘，关闭窗口驻留托盘）；Windows 服务形态待实施。
-- 自启动：Windows 服务与登录自启待实施。
+- 自启动与守护：按当前用户写入 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\Sim.DeviceAgent`，命令为 `"<exe>" --watchdog --config "<agent.json>"`；登录后由同 exe 的 `--watchdog` 守护进程拉起主程序（`--autostart`，仅驻留托盘）并每 2 秒巡检。主程序异常退出按 2–60 秒指数退避重启；托盘“退出”通过命名事件通知守护进程一并退出。界面开关默认开启，选择存于配置文件同目录的 `ui-settings.json`，启动时据此校正注册表。Windows 服务形态仍待实施；注销/关机瞬间的重启竞态由系统终止兜底。
 - 升级：P2 引入签名升级包与中心下发；升级前备份配置与 spool，失败自动回滚上一版本。
 - 日志：结构化 JSON 行，按天/大小滚动，本地保留 14 天；关键事件包括连接状态、配置变更、事务结果、spool 水位。
 - 可观测：每 30 秒向中心上报心跳（`agentId`、当前 `hostName`、各设备状态、最后数据时间、队列水位、丢弃计数）；本地管理 API 提供同样指标。
@@ -461,11 +466,11 @@ Die 推力测试数据（同一上位机、不同解析插件）：
 
 ## 12. 与平台集成
 
-- **中心网关**（后续在 `api` 新增模块或独立服务，本设计只定义职责）：设备凭据认证、按 `agentId + deviceId` 注册多台设备与在线状态、消息去重与入库、按设备类型向业务模块转发、原始帧留存策略。
+- **中心网关**（后续在 `api` 新增模块或独立服务，本设计只定义职责）：设备凭据认证、按 `agentId + deviceId` 注册多台设备与在线状态、消息去重与入库、按设备台账映射向业务模块转发、原始帧留存策略。
 - **边界**：Agent 只负责采集与转发，不直接写数据库；业务模块通过 Contracts 端口消费设备数据，审批/检验等业务逻辑不进入 Agent。
-- **前端契约**：前端统一对接「设备数据客户端」抽象（`{deviceId, deviceType, 值, 单位, 时间戳, 稳定标志, 状态}`），传输层可选本机 WebSocket 或平台 SignalR；页面不感知串口细节，并按设备订阅。
+- **前端契约**：前端统一对接「设备数据客户端」抽象（`{deviceId, 原始文本, parsed, 时间戳, 状态}`），传输层可选本机 WebSocket 或平台 SignalR；页面不感知串口细节，并按设备订阅；重量、单位、稳定标志等业务语义由下游页面自行解析 `parsed`/原文。
 - **设备台账**：平台维护设备台账，`deviceId` 使用台账中的设备编号/编码并与 `agentId` 关联；同一上位机可登记多台设备，工位页面按当前工位解析可用设备。
-- **测试类型区分**：`deviceType` 只表达采集类别（`pullTest`/`dieShear`/`scale` 等），具体业务检验类型由平台映射；一台上位机的多台设备数据不得合并为同一条记录。
+- **测试类型区分**：Agent 不保存业务类型；平台按 `agentId + deviceId` 台账把设备映射到具体业务与检验类型；一台上位机的多台设备数据不得合并为同一条记录。
 - **文件型设备**：原始文件可按平台文件存储能力归档留存；Agent 上传解析记录、文件元数据（名称、大小、SHA-256）与可选原文件，检验记录通过 `fileRef` 回溯到文件与记录序号。
 - **典型链路**：每台设备 → Agent 中对应设备定义 → 中心网关 → 业务模块生成检验记录 → Web 按设备展示；原始帧按配置留存用于追溯。
 
@@ -496,7 +501,7 @@ Die 推力测试数据（同一上位机、不同解析插件）：
 - 示例：
 
 ```json
-{ "deviceId": "PT-002", "type": "file", "deviceType": "pullTest",
+{ "deviceId": "PT-002", "type": "file",
   "deviceName": "焊线拉力测试机 02（文件导出）",
   "directory": "D:/device/in", "pattern": "PT02_*.csv", "stableSeconds": 5,
   "archiveDirectory": "D:/device/archive", "errorDirectory": "D:/device/error",
@@ -512,14 +517,14 @@ Die 推力测试数据（同一上位机、不同解析插件）：
 
 - 一台上位机同时连接：COM3 焊线拉力测试机（指令/应答）、COM4 上的 Die 焊接推力测试机、另一台拉力机的专属 CSV 导出目录。
 - 三台设备分别使用内置正则解析、厂商解析插件和内置 CSV 解析；共用中心 WebSocket 出口，但各自维护设备序号、队列与 spool 分区。
-- 任一设备拔线、解析失败或插件崩溃只影响该设备；页面按 `deviceId`/`deviceType` 订阅当前工位需要的设备。
+- 任一设备拔线、解析失败或插件崩溃只影响该设备；页面按 `deviceId` 订阅当前工位需要的设备。
 
 ## 14. 分阶段实施
 
 | 阶段 | 范围 | 验收 |
 | --- | --- | --- |
 | P0（MVP，已实现） | `serial` + `tcp` + `file` → 本机 `wsServer`；多台设备各自绑定内置解析器；配置校验、日志、设备级状态、命令事务 | 电子秤与拉力机两台设备并发采集 8 小时；拔掉一台不影响另一台；页面按设备订阅，刷新/多标签可恢复 |
-| P1 | 中心 `wsClient` + 按设备 spool 分区 + 去重；RabbitMQ 生产出口；文件设备与内置 CSV/行解析；多设备共用出口；管理 API；Windows 服务与托盘；命令事务 | 断网 10 分钟后按设备恢复补传且无重复；服务重启后每台设备序号延续；文件投递/重复投递/文件目录断开符合第 7.3 节；各设备独立接入互不影响 |
+| P1 | 中心 `wsClient` + 按设备 spool 分区 + 去重；RabbitMQ / Kafka 生产出口；文件设备与内置 CSV/行解析；多设备共用出口；管理 API；Windows 服务与托盘；命令事务 | 断网 10 分钟后按设备恢复补传且无重复；服务重启后每台设备序号延续；文件投递/重复投递/文件目录断开符合第 7.3 节；各设备独立接入互不影响 |
 | P2 | 解析器插件宿主与插件契约、多设备不同插件并行、厂商 SDK 插件、定长/长度前缀完善、HTTP 出口、配置中心下发、签名升级 | 拉力测试与 Die 推力测试使用不同插件同时在线；单插件崩溃只影响对应设备；畸形文件进入错误目录；插件版本切换只重启对应设备 |
 | P3 | 中心设备管理页、MQTT、Linux/systemd、采样限流与批量聚合 | 车队级升级与状态总览可用；Linux 串口按 by-id 稳定绑定 |
 
@@ -555,7 +560,6 @@ Die 推力测试数据（同一上位机、不同解析插件）：
 | Q-06 | 是否需要首期支持 Linux 采集机 | 部署规划 |
 | Q-07 | 数据文件格式、目录约定、完成标志与归档/删除要求 | 设备厂商 / 现场 |
 | Q-08 | 解析插件的签名、分发与版本管理方式 | 平台与交付 |
-| Q-09 | 设备类型字典与台账映射（拉力/Die 推力/电子秤等） | 平台与质量 |
 | Q-10 | 单台设备多工位（multi-station）的结果编码与 `stationId` 扩展方式 | 设备厂商 / 现场 |
 
 ## 17. 当前实现状态
@@ -564,25 +568,27 @@ Die 推力测试数据（同一上位机、不同解析插件）：
 
 | 能力 | 状态 | 说明 |
 | --- | --- | --- |
-| 多设备（一设备一链路） | 已实现 | 每设备独立 `deviceId`、`deviceType`、解析器、有界队列和 `seq` |
+| 多设备（一设备一链路） | 已实现 | 每设备独立 `deviceId`、解析器、有界队列和 `seq` |
 | `serial` / `tcp` / `file` 接入 | 已实现 | 串口与 TCP 自动重连；文件稳定判定、SHA-256、归档/错误目录 |
 | `delimiter` + 正则 / `passthrough` / `csv` | 已实现 | CSV 要求表头；支持引号、列映射和数值/布尔转换 |
-| 本机 WebSocket | 已实现 | 每个 `wsServer` 出口独立监听回环地址，可配置多个地址；令牌与 Origin 按出口生效；支持按通道/设备/类型订阅、状态快照 |
+| 本机 WebSocket | 已实现 | 每个 `wsServer` 出口独立监听回环地址，可配置多个地址；令牌与 Origin 按出口生效；支持按设备订阅、状态快照 |
 | 命令事务 | 已实现 | 文本命令 + 正则匹配 + 超时；单通道串行 |
 | `/health`、`/api/status` | 已实现 | 随每个 `wsServer` 监听地址提供，单机模式匿名；状态包含设备、出口、监听地址和最近一次配置重载结果 |
 | `wsClient` / spool / 补传 | Agent 侧已实现 | 可选静态 Bearer、`hello`、心跳、指数退避；发送前落盘，收到中心 `ack` 后推进水位并删除已确认分段；断线/重启重放未确认数据。按天滚动、保留期、全局配额和短期令牌交换尚未实现 |
 | `rabbitmq` / spool / 发布确认 | 已实现 | 声明交换机、路由键模板、持久化消息、发布确认后推进 spool；断线/重启补发。AMQP TLS 与管理界面之外的拓扑治理未实现 |
+| `kafka` / spool / 发布确认 | 已实现 | 主题与消息键模板、SASL/SSL 连接参数、`acks=all` 幂等生产者、Broker 确认后推进 spool；断线/重启补发。主题与分区治理由 Broker 侧负责 |
 | 跨重启设备序号 | 已实现 | `stateDirectory/sequences.json` 按设备预留 100000 序号块，重启跳块避免序号复用，允许空洞 |
 | 平台侧中心网关 | 未实现 | 当前缺少接收端点、去重入库、在线状态与业务转发；Agent 只定义了 `hello` / `data` / `ack` / `heartbeat` 协议 |
 | 解析插件 / 厂商 SDK 插件 | 未实现 | `plugin` codec 会被启动校验拒绝 |
 | WinUI3 桌面端 / JS 解析脚本 | 部分实现 | 宿主外壳 P0 与设备/出口/Agent 结构化配置编辑已实施：校验后原子写回 `agent.json` 并触发热加载；解析脚本、实时数据、日志页与 Jint 沙箱解析待 P1，设计见 [`UI_DESIGN.md`](UI_DESIGN.md) |
 | 配置热加载 | 已实现 | 文件监听 0.4 秒防抖、`POST /api/config/reload`、托盘手动重载强制应用、内容哈希去重；校验失败保留旧配置；`agent.id`、状态目录要求重启，出口（含监听地址）按新配置重建 |
 | Windows 托盘 | 已实现 | WinUI3 宿主内的原生 Win32 `Shell_NotifyIcon`：打开主界面、打开配置、重新加载配置、退出；关闭窗口最小化到托盘；托盘失败不阻止 Agent 运行 |
-| Windows 服务 / 开机自启 / 自动升级 | 未实现 | 当前为 WinUI3 托盘应用，关闭窗口后驻留托盘 |
+| 开机自启 / 进程守护 | 已实现 | 默认写入 HKCU Run（值名 `Sim.DeviceAgent`，命令 `--watchdog --config …`）；守护进程拉起主程序、崩溃自动重启、托盘退出联动；配置页“Agent → 启动与守护”可关闭，状态存 `ui-settings.json` |
+| Windows 服务 / 自动升级 | 未实现 | 当前为 WinUI3 托盘应用，关闭窗口后驻留托盘 |
 | 宿主目标 | `net10.0-windows` | 本机模式不需要 TLS 和令牌；跨平台宿主后续拆分 |
-| `tcpServer` / `udp` / HTTP / MQTT | 未实现 | 后续阶段；RabbitMQ 出口已单独实现 |
+| `tcpServer` / `udp` / HTTP / MQTT | 未实现 | 后续阶段；RabbitMQ / Kafka 出口已单独实现 |
 | `file-state.json` 持久化 | 未实现 | MVP 使用归档移动 + 进程内去重，极端窗口内可能重复处理 |
 
 设计边界：源与设备固定 1:1，不支持共享源 `demux`。若现场一条物理链路确实承载多台设备（RS-485 多从站、聚合器多工位），由设备侧网关/前置采集器拆分后接入。
 
-验证：`dotnet test Sim.DeviceAgent.slnx` 当前 53 个测试通过，覆盖编解码、配置校验（含三个示例配置、`wsServer` 地址必填/重复地址拒绝、RabbitMQ 字段、旧 `agent.localWs` 迁移）、配置路径解析、默认配置生成、文件设备、命令事务、设备订阅、信封序列化、多个 `wsServer` 出口分别监听并各自校验令牌、每个 `wsServer` 监听地址上的管理接口、序号跨重启、spool 顺序/未确认回放/重启水位恢复/活动分段续读/配额、RabbitMQ Broker 不可用时的 spool 落盘、运行时配置重载与需重启字段拒绝、配置写盘（CRLF/无 BOM/往返校验），以及带 ack 的模拟中心 WebSocket 集成。此前真实进程冒烟验证了：配置文件缺失时自动创建默认配置并启动、无令牌访问状态接口、修改配置后自动重建设备、WinUI3 主窗口启动、托盘隐藏窗口注册、单实例唤醒、关闭窗口最小化到托盘、CSV → 设备 → spool、中心断线 pending 计数和重启后序号延续；WinUI3 配置页通过 UI 自动化修改显示名称并保存，`agent.json` 重写为 `devices` 结构且热加载生效；通过“新增出口”对话框输入编号并选择 `wsServer` 后保存，新增出口写入配置并完成热加载。本轮改动通过了构建与单元/集成测试；RabbitMQ 仅验证了 Broker 不可用时的缓冲与状态，尚未与真实 Broker 联调；尚未与平台侧真实中心网关联调，因为该网关未实现。
+验证：`dotnet test Sim.DeviceAgent.slnx` 当前 56 个测试通过，覆盖编解码、配置校验（含示例配置、`wsServer` 地址必填/重复地址拒绝、RabbitMQ/Kafka 字段、旧 `agent.localWs` 迁移）、配置路径解析、默认配置生成、文件设备、命令事务、设备订阅、信封序列化、多个 `wsServer` 出口分别监听并各自校验令牌、每个 `wsServer` 监听地址上的管理接口、序号跨重启、spool 顺序/未确认回放/重启水位恢复/活动分段续读/配额、RabbitMQ/Kafka Broker 不可用时的 spool 落盘、运行时配置重载与需重启字段拒绝、配置写盘（CRLF/无 BOM/往返校验），以及带 ack 的模拟中心 WebSocket 集成。此前真实进程冒烟验证了：配置文件缺失时自动创建默认配置并启动、无令牌访问状态接口、修改配置后自动重建设备、WinUI3 主窗口启动、托盘隐藏窗口注册、单实例唤醒、关闭窗口最小化到托盘、CSV → 设备 → spool、中心断线 pending 计数和重启后序号延续；WinUI3 配置页通过 UI 自动化修改显示名称并保存，`agent.json` 重写为 `devices` 结构且热加载生效；通过“新增出口”对话框输入编号并选择 `wsServer` 后保存，新增出口写入配置并完成热加载。本轮改动通过了构建与单元/集成测试；RabbitMQ 与 Kafka 仅验证了 Broker 不可用时的缓冲与状态，尚未与真实 Broker 联调；尚未与平台侧真实中心网关联调，因为该网关未实现。2026-11-26 对自定义标题栏、开机自启与进程守护做了真实进程冒烟：主窗口自定义标题栏渲染正常（仅应用名、无地址行）、配置页开关可关闭/开启自启（Run 项与 `ui-settings.json` 同步）、守护进程随主程序启动、强杀主程序后约 3 秒内自动重启为托盘模式、命名事件可让守护进程与主程序解耦退出；测试用的临时配置、Run 项与进程已清理。

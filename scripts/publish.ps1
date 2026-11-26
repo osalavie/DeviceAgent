@@ -72,9 +72,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "dotnet publish failed with exit code $LASTEXITCODE"
 }
 
-foreach ($example in @("agent.example.json", "agent.center.example.json", "agent.rabbitmq.example.json")) {
-    Copy-Item -LiteralPath (Join-Path $ToolRoot (Join-Path "src\Sim.DeviceAgent.App" $example)) -Destination $Output -Force
-}
+Copy-Item -LiteralPath (Join-Path $ToolRoot "src\Sim.DeviceAgent.App\agent.example.json") -Destination $Output -Force
 
 Write-Host "Published to $Output"
 Write-Host "Copy agent.example.json to agent.json next to the exe and edit it for the site."

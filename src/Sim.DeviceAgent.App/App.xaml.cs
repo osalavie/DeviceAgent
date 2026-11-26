@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
+using Sim.DeviceAgent.App.Logging;
 using Sim.DeviceAgent.App.Shell;
 using Sim.DeviceAgent.App.Tray;
 using Sim.DeviceAgent.Configuration;
@@ -11,15 +12,16 @@ namespace Sim.DeviceAgent.App;
 
 public partial class App : Application
 {
-    private const string InstanceName = "Sim.DeviceAgent.App";
-
     private MainWindow? _window;
     private AgentRuntimeHost? _host;
     private TrayIcon? _tray;
     private SingleInstance? _singleInstance;
+    private StartupGuardService? _startupGuard;
     private Microsoft.UI.Dispatching.DispatcherQueue _dispatcherQueue = null!;
     private string _configPath = string.Empty;
     private bool _exiting;
+    private FileLoggerProvider? _fileLog;
+    private ILogger? _appLogger;
 
     public App()
     {
@@ -33,7 +35,7 @@ public partial class App : Application
         var autostart = commandLine.Any(
             arg => string.Equals(arg, "--autostart", StringComparison.OrdinalIgnoreCase));
 
-        _singleInstance = new SingleInstance(InstanceName);
+        _singleInstance = new SingleInstance(AppIdentity.InstanceName);
         if (!_singleInstance.IsPrimary)
         {
             _singleInstance.SignalShow();
@@ -54,36 +56,74 @@ public partial class App : Application
                 : $"{createConfigError}{Environment.NewLine}{configError}";
         }
 
+        _fileLog = new FileLoggerProvider(ResolveLogDirectory(config?.Agent.StateDirectory));
+        _appLogger = _fileLog.CreateLogger("Sim.DeviceAgent.App");
+
+        try
+        {
+            _startupGuard = new StartupGuardService(
+                _configPath,
+                _fileLog.CreateLogger("Sim.DeviceAgent.App.StartupGuard"));
+            _startupGuard.Start();
+        }
+        catch (Exception ex)
+        {
+            var guardError = $"启动守护初始化失败：{ex.Message}";
+            configError = configError is null ? guardError : $"{configError}{Environment.NewLine}{guardError}";
+            _appLogger.LogWarning(ex, "Startup guard initialization failed.");
+        }
+
+        if (configError is not null)
+        {
+            _appLogger.LogError("Configuration error: {Error}", configError);
+        }
+
         if (config is not null)
         {
             try
             {
-                _host = AgentRuntimeHost.Create(config, _configPath, logging => logging.AddDebug());
+                _host = AgentRuntimeHost.Create(
+                    config,
+                    _configPath,
+                    logging => logging.AddDebug().AddProvider(_fileLog));
+                _appLogger.LogInformation(
+                    "Application starting (agent {AgentId}, config {ConfigPath}).",
+                    config.Agent.Id,
+                    _configPath);
             }
             catch (Exception ex)
             {
                 configError = ex.Message;
+                _appLogger.LogError(ex, "Failed to create the agent runtime.");
             }
         }
 
         var startupNotice = createdDefault
             ? $"未找到配置文件，已自动创建默认配置：{_configPath}"
             : null;
-        _window = new MainWindow(_host, _configPath, configError, startupNotice);
+        _window = new MainWindow(_host, _configPath, configError, startupNotice, _startupGuard);
 
         var trayEnabled = config?.Agent.Tray.Enabled ?? true;
         if (trayEnabled)
         {
-            _tray = new TrayIcon(
-                config?.Agent.Id ?? "Device Agent",
-                onShow: ShowMainWindow,
-                onOpenConfig: OpenConfigFile,
-                onReload: () => _ = ReloadAsync(),
-                onExit: () => _ = ExitAsync());
-            _tray.Initialize();
+            try
+            {
+                _tray = new TrayIcon(
+                    config?.Agent.Id ?? "Device Agent",
+                    onShow: ShowMainWindow,
+                    onOpenConfig: OpenConfigFile,
+                    onReload: () => _ = ReloadAsync(),
+                    onExit: () => _ = ExitAsync());
+                _tray.Initialize();
+            }
+            catch (Exception ex)
+            {
+                _appLogger.LogWarning(ex, "Tray initialization failed; the agent keeps running.");
+                _tray = null;
+            }
         }
 
-        if (!autostart || !trayEnabled)
+        if (!autostart || !trayEnabled || _tray is null)
         {
             ShowMainWindow();
         }
@@ -201,28 +241,48 @@ public partial class App : Application
         }
 
         _exiting = true;
+        _appLogger?.LogInformation("Exit requested from the tray; closing the window immediately.");
+        _startupGuard?.Stop();
+        _startupGuard = null;
         _tray?.Dispose();
         _tray = null;
+
+        // 托盘退出时主窗口立即关闭，运行时最多再收尾 1 秒。
+        _window?.AllowClose();
+        _window?.Close();
 
         if (_host is not null)
         {
             try
             {
-                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(1));
                 await _host.StopAsync(timeout.Token);
             }
-            catch
+            catch (Exception ex)
             {
                 // The process is exiting; spool replay recovers unacknowledged data on restart.
+                _appLogger?.LogWarning(ex, "Runtime shutdown did not finish; exiting anyway.");
             }
 
-            await _host.DisposeAsync();
+            // 不再等待 DisposeAsync：进程即将退出，未确认数据由 spool 在下次启动重放。
             _host = null;
         }
 
-        _window?.AllowClose();
-        _window?.Close();
+        _appLogger?.LogInformation("Agent exited.");
+        _fileLog?.Dispose();
+        _fileLog = null;
         _singleInstance?.Dispose();
         Exit();
+    }
+
+    private static string ResolveLogDirectory(string? stateDirectory)
+    {
+        var directory = string.IsNullOrWhiteSpace(stateDirectory) ? "data" : stateDirectory;
+        if (!Path.IsPathRooted(directory))
+        {
+            directory = Path.Combine(AgentConfigLoader.ProgramDirectory, directory);
+        }
+
+        return Path.Combine(directory, "logs");
     }
 }

@@ -53,8 +53,6 @@ public sealed class DeviceConfig
 
     public string Type { get; set; } = string.Empty;
 
-    public string DeviceType { get; set; } = string.Empty;
-
     public string DeviceName { get; set; } = string.Empty;
 
     [JsonConverter(typeof(FlexibleStringJsonConverter))]
@@ -133,6 +131,23 @@ public sealed class SinkConfig
     public bool Durable { get; set; } = true;
 
     public bool Persistent { get; set; } = true;
+
+    // Kafka producer.
+    public string? BootstrapServers { get; set; }
+
+    public string Topic { get; set; } = string.Empty;
+
+    public string MessageKey { get; set; } = "{agentId}:{deviceId}";
+
+    public string SecurityProtocol { get; set; } = "plaintext";
+
+    public string SaslMechanism { get; set; } = "plain";
+
+    public string SaslUsername { get; set; } = string.Empty;
+
+    public string SaslPassword { get; set; } = string.Empty;
+
+    public string? SslCaLocation { get; set; }
 
     public int ReconnectMinSeconds { get; set; } = 1;
 

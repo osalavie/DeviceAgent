@@ -205,7 +205,6 @@ public sealed class SpoolTests
             Type = MessageTypes.Data,
             AgentId = "agent-test",
             DeviceId = "PT-001",
-            DeviceType = "pullTest",
             Seq = seq,
             Ts = DateTimeOffset.UtcNow,
             Raw = "eA==",

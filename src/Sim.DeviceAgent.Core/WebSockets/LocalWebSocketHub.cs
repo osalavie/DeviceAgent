@@ -39,6 +39,7 @@ public sealed class LocalWebSocketHub
         var origin = context.Request.Headers.Origin.ToString();
         if (!IsOriginAllowed(origin))
         {
+            _logger.LogWarning("Rejected WebSocket client from origin {Origin}.", origin);
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
             await context.Response.WriteAsync("Origin is not allowed.");
             return;
@@ -76,6 +77,7 @@ public sealed class LocalWebSocketHub
         finally
         {
             _clients.TryRemove(client.Id, out _);
+            _logger.LogInformation("WebSocket client {ClientId} disconnected.", client.Id);
             cts.Cancel();
             client.Outbound.Writer.TryComplete();
             try
@@ -138,6 +140,10 @@ public sealed class LocalWebSocketHub
         }
 
         client.Authenticated = true;
+        _logger.LogInformation(
+            "WebSocket client {ClientId} subscribed (devices: {Devices}).",
+            client.Id,
+            client.Subscription.Devices.Count == 0 ? "*" : string.Join(",", client.Subscription.Devices));
         await EnqueueAsync(client, CreateHelloAck());
         await SendStatusSnapshotAsync(client);
 
@@ -292,7 +298,6 @@ public sealed class LocalWebSocketHub
                 Type = MessageTypes.Response,
                 AgentId = _config.Agent.Id,
                 DeviceId = device.DeviceId,
-                DeviceType = device.DeviceType,
                 RequestId = requestId,
                 Ts = DateTimeOffset.UtcNow,
                 Ok = outcome.Success
@@ -389,7 +394,6 @@ public sealed class LocalWebSocketHub
             .Select(status => new
             {
                 status.DeviceId,
-                status.DeviceType,
                 status.DeviceName,
                 status.Type,
                 status.State
@@ -421,8 +425,7 @@ public sealed class LocalWebSocketHub
             {
                 subscribed = new
                 {
-                    devices = client.Subscription.Devices.ToArray(),
-                    types = client.Subscription.Types.ToArray()
+                    devices = client.Subscription.Devices.ToArray()
                 }
             }, AgentJson.Options)
         };
@@ -435,7 +438,6 @@ public sealed class LocalWebSocketHub
             Type = MessageTypes.Status,
             AgentId = _config.Agent.Id,
             DeviceId = status.DeviceId,
-            DeviceType = status.DeviceType,
             Seq = status.Seq,
             Ts = DateTimeOffset.UtcNow,
             State = status.State,
@@ -470,7 +472,6 @@ public sealed class LocalWebSocketHub
             Type = MessageTypes.Response,
             AgentId = _config.Agent.Id,
             DeviceId = device?.DeviceId ?? deviceId,
-            DeviceType = device?.DeviceType,
             RequestId = requestId,
             Ts = DateTimeOffset.UtcNow,
             Ok = false,

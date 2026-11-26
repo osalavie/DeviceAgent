@@ -39,6 +39,7 @@ public sealed class SinkEntry : INotifyPropertyChanged
     {
         "wsserver" => $"{Id} · wsServer · {Config.Bind}:{Config.Port}",
         "rabbitmq" => $"{Id} · rabbitmq · {Config.Host}:{Config.Port}",
+        "kafka" => $"{Id} · kafka · {Config.BootstrapServers}/{Config.Topic}",
         _ => $"{Id} · {Config.Type}"
     };
 

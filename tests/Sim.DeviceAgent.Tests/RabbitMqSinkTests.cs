@@ -39,7 +39,6 @@ public sealed class RabbitMqSinkTests
                 Type = MessageTypes.Data,
                 AgentId = "agent-test",
                 DeviceId = "PT-001",
-                DeviceType = "pullTest",
                 Seq = 1,
                 Ts = DateTimeOffset.UtcNow
             });

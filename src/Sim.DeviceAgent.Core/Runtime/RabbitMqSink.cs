@@ -335,10 +335,9 @@ public sealed class RabbitMqSink : IEnvelopeSink
         using var document = ParseEnvelope(entry.Json);
         var root = document?.RootElement;
         var messageType = GetString(root, "type");
-        var deviceType = GetString(root, "deviceType");
         var timestamp = GetTimestamp(root);
 
-        var routingKey = BuildRoutingKey(entry.DeviceId, deviceType);
+        var routingKey = BuildRoutingKey(entry.DeviceId);
         var properties = new BasicProperties
         {
             ContentType = "application/json",
@@ -373,7 +372,7 @@ public sealed class RabbitMqSink : IEnvelopeSink
         }
     }
 
-    private string BuildRoutingKey(string deviceId, string? deviceType)
+    private string BuildRoutingKey(string deviceId)
     {
         var template = string.IsNullOrWhiteSpace(_config.RoutingKey)
             ? "device.{deviceId}"
@@ -381,8 +380,7 @@ public sealed class RabbitMqSink : IEnvelopeSink
 
         return template
             .Replace("{agentId}", _agent.Id, StringComparison.OrdinalIgnoreCase)
-            .Replace("{deviceId}", deviceId, StringComparison.OrdinalIgnoreCase)
-            .Replace("{deviceType}", deviceType ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+            .Replace("{deviceId}", deviceId, StringComparison.OrdinalIgnoreCase);
     }
 
     private static JsonDocument? ParseEnvelope(string json)

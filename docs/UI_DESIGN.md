@@ -1,6 +1,6 @@
 # DeviceAgent WinUI3 桌面端设计（设备配置与 JS 解析脚本）
 
-> 状态：P0 已实施（2026-11-20）——Core/App 工程拆分、WinUI3 壳、原生 Win32 `Shell_NotifyIcon` 托盘、单实例、概览页；2026-11-26 已实施主窗口“运行状态 / 配置”页签与设备、出口、Agent 的结构化配置编辑（校验后原子写回 `agent.json` 并热加载），并将 WebSocket 监听地址、令牌与 Origin 归入各 `wsServer` 出口、新增 `rabbitmq` 出口编辑；解析脚本、实时数据、日志页仍未实施。宿主形态已确定：现有控制台 + WinForms 托盘改为 **WinUI3 一体化托盘应用**，界面、托盘与采集运行时同进程；关闭主窗口默认最小化到托盘，可设置开机启动。
+> 状态：P0 已实施（2026-11-20）——Core/App 工程拆分、WinUI3 壳、原生 Win32 `Shell_NotifyIcon` 托盘、单实例、概览页；2026-11-26 已实施主窗口“运行状态 / 配置”页签与设备、出口、Agent 的结构化配置编辑（校验后原子写回 `agent.json` 并热加载），并将 WebSocket 监听地址、令牌与 Origin 归入各 `wsServer` 出口、新增 `rabbitmq` 与 `kafka` 出口编辑；同日主窗口改为自定义标题栏（仅应用名、标签页紧贴标题栏），开机自启与 `--watchdog` 进程守护上线（Agent 配置页“启动与守护”开关，默认开启）；解析脚本、实时数据、日志页仍未实施。宿主形态已确定：现有控制台 + WinForms 托盘改为 **WinUI3 一体化托盘应用**，界面、托盘与采集运行时同进程；关闭主窗口默认最小化到托盘，可设置开机启动。
 >
 > 关联：[`ARCHITECTURE.md`](ARCHITECTURE.md)（采集链路与协议基线）、[`README.md`](../README.md)（当前实现与运行方式）。
 >
@@ -15,7 +15,7 @@
 | 宿主形态 | WinUI3 一体化宿主：UI、托盘、采集运行时在同一个 `Sim.DeviceAgent.App.exe` 进程内 |
 | 托盘实现 | 原生 Win32 `Shell_NotifyIconW` + 隐藏顶层窗口接收回调（可接收 `TaskbarCreated` 广播），菜单用 `TrackPopupMenu`；不引入 H.NotifyIcon 等第三方托盘包 |
 | 窗口行为 | 关闭主窗口默认最小化到托盘；只有托盘“退出”或设置页显式退出才结束进程 |
-| 开机启动 | 设置页开关，写入 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`；带 `--autostart` 启动时只驻留托盘 |
+| 开机启动 | Agent 配置页“启动与守护”开关（默认开启），写入 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`，由 `--watchdog` 守护进程拉起主程序；带 `--autostart` 启动时只驻留托盘 |
 | 配置事实 | 继续以 `agent.json` 为唯一运行配置；UI 结构化编辑后原子写回并触发现有热加载 |
 | 解析脚本 | 新增 `script` Codec：Jint 进程内沙箱执行 JS，用于帧/文件解析；自定义切帧仍留 P2 |
 | 管理面 | UI 直接调用进程内运行时服务；本机 HTTP/WebSocket 接口继续服务浏览器页面，不要求 UI 走回环 HTTP |
@@ -47,7 +47,7 @@
 │  │ Dashboard / Devices         │  facades  │ Devices：serial/tcp/file        │ │
 │  │ Scripts / Live / Logs       │◄─────────►│ Codecs：delimiter/csv/script   │ │
 │  │ Logs / Settings             │           │ ScriptHost（Jint 沙箱）        │ │
-│  │ WebView2 + Monaco（脚本）   │           │ Sinks：wsServer/wsClient/rabbitmq │ │
+│  │ WebView2 + Monaco（脚本）   │           │ Sinks：wsServer/wsClient/rabbitmq/kafka │ │
 │  └─────────────────────────────┘           │ ConfigWatcher / Reloader       │ │
 │                                            │ 本机 /ws、/api/status          │ │
 │  Shell_NotifyIcon 托盘                       └────────────────────────────────┘ │
@@ -139,6 +139,27 @@ src/
 └──────────────┴─────────────────────────────────────────────────────────┘
 ```
 
+### 3.1 已实施的窗口标题栏（2026-11-26）
+
+当前实现采用页签式主窗口 + 自定义标题栏（`ExtendsContentIntoTitleBar`，参考串口模拟器项目）：
+
+```text
+┌──────────────────────────────────────────────────────────────────────┐
+│ Device Agent                                               ─  □  ×  │
+├──────────────────────────────────────────────────────────────────────┤
+│ [运行状态] [配置]                                                     │
+│                                                                      │
+│ 设备                              出口                               │
+│ ...                                                                  │
+│                                                                      │
+│ 配置文件：C:\...\agent.json                                          │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+- 标题栏高 48 px（Windows 11 使用 Tall 高度），左侧只显示应用名 `Device Agent`；窗口拖动区域为标题栏空白区，最小化/最大化/关闭使用系统按钮。
+- 删除原页面内的大标题（`Device Agent · 机台名（ID）`）和其下方的 `运行中 · ws://…` 地址行；运行状态、监听地址统一在“运行状态”页查看，窗口底部保留配置文件路径。
+- 标签页紧贴标题栏（上边距 4 px），不再保留页面级大标题占位。
+
 | 页面 | 导航键 | 核心职责 |
 | --- | --- | --- |
 | 概览 | Ctrl+1 | Agent 身份、运行状态、设备卡片、告警、最近事件 |
@@ -190,12 +211,12 @@ Agent · agent-line-a-01                         [重新加载配置] [打开配
 设备                                             [+ 新建设备] [搜索…]
 ┌──────────────────┬──────────────────────────────────────────────────────┐
 │ PT-001           │ 焊线拉力测试机 01        ● 已连接      [启用] [实时] │
-│ 焊线拉力机 01     │ PT-001 · pullTest · serial · COM3                    │
+│ 焊线拉力机 01     │ PT-001 · serial · COM3                               │
 │ COM3 · 已连接     ├──────────────────────────────────────────────────────┤
 │                  │ [基本信息] [接入配置] [解析器] [出口] [诊断]          │
 │ DS-001           │                                                      │
 │ Die 推力机 01     │  设备编号  PT-001        接入方式  serial            │
-│ TCP · 已连接      │  设备类型  pullTest ▼    设备名称  焊线拉力测试机 01  │
+│ TCP · 已连接      │  设备名称  焊线拉力测试机 01                         │
 │                  │  队列容量  1024         启用      ●────────           │
 │ PT-002           │                                                      │
 │ 文件拉力机 02     │  [保存]  [放弃修改]                                   │
@@ -209,7 +230,6 @@ Agent · agent-line-a-01                         [重新加载配置] [打开配
 | --- | --- | --- |
 | `deviceId` | 文本框 | 必填，同一 Agent 下唯一，建议取平台台账设备编号；创建后不可修改（订阅、命令与状态键） |
 | `type` | 分段选择 | 创建时选择 `serial` / `tcp` / `file`；如需更换链路，新建设备并停用旧设备 |
-| `deviceType` | 可编辑下拉 | 预置 `scale` / `pullTest` / `dieShear`，允许填写新类型 |
 | `deviceName` | 文本框 | 展示名 |
 | `enabled` | 开关 | 关闭后该设备不参与启动校验与运行 |
 | `queueCapacity` | 数字框 | 16–1000000 |
@@ -243,7 +263,7 @@ Agent · agent-line-a-01                         [重新加载配置] [打开配
 
 新建设备向导（3 步）：
 
-1. 基本信息：`deviceId`、接入方式、设备类型、名称。
+1. 基本信息：`deviceId`、接入方式、设备名称。
 2. 接入配置：按接入方式填写串口/TCP/文件参数。
 3. 解析器与出口：选择解析器（含脚本）、出口、队列容量。
 
@@ -408,17 +428,18 @@ TCP：
 | RabbitMQ 出口 | 主机、端口、Virtual Host、用户名/密码、交换机/类型、路由键、持久化、spool 参数 | `agent.json` | 保存后重载生效 |
 | 数据与状态 | 状态目录、磁盘占用、打开目录 | `agent.json` | 状态目录需重启 |
 | 桌面体验 | 关闭窗口行为、主题、托盘启用、实时缓冲大小 | `ui-settings.json`；托盘启用存 `agent.json` | 即时 |
-| 开机启动 | 随 Windows 启动、启动时最小化 | 注册表 `HKCU\...\Run`（镜像到 `ui-settings.json`） | 即时 |
+| 开机启动 | Agent 配置页“启动与守护 → 开机自启”开关（默认开启） | 注册表 `HKCU\...\Run`（镜像到配置文件同目录的 `ui-settings.json`） | 即时 |
 | 配置 | 配置路径、打开配置文件、重新加载、打开脚本目录 | — | 即时 |
 | 关于 | 版本、构建时间、Windows App SDK 版本、本机 WebSocket 地址列表 | — | — |
 
-开机启动细节：
+开机启动与进程守护细节（2026-11-26 已实施）：
 
-- 注册表值名 `Sim.DeviceAgent`，命令为 `"<exe 完整路径>" --autostart`。
-- 开关关闭时删除该值；开启时写入并立即校验当前 exe 路径。
-- 应用启动时读取注册表显示真实状态；如果 exe 被移动，提示“开机启动路径失效，是否更新”。
+- 注册表值名 `Sim.DeviceAgent`，命令为 `"<exe 完整路径>" --watchdog --config "<agent.json>"`。`--watchdog` 为同 exe 的无界面守护进程：登录后拉起主程序（`--autostart`，只驻留托盘），每 2 秒巡检，主程序消失且未收到退出信号时按 2–60 秒指数退避重启。
+- 托盘“退出”通过命名事件 `Local\Sim.DeviceAgent.App.Stop` 通知守护进程一并退出；主程序崩溃/被强杀不会发信号，因此会被重启（托盘模式）。守护进程自身由主程序每 5 秒补拉，双方互为守护。
+- 开关默认开启：首次启动即写入 Run 项；关闭时删除该值并写入 `ui-settings.json`（`{ "startWithWindows": false }`），当前运行实例的守护不受影响，下次登录不再自启。
+- 应用启动时以 `ui-settings.json` 为准校正注册表；exe 或配置路径变化时自动更新命令，不弹窗。
 - 带 `--autostart` 启动固定不显示主窗口，只驻留托盘；设置页“启动时最小化”控制的是手动启动时的表现。
-- 当前采用当前用户注册表项，不需要管理员权限；面向全用户安装或提权运行的方案留 P2（HKLM Run 或任务计划）。
+- 当前采用当前用户注册表项，不需要管理员权限；面向全用户安装或提权运行的方案留 P2（HKLM Run 或 Windows 服务）。
 - 不在应用内自动提升权限；串口与文件目录访问权限按运行账户处理。
 
 开关“托盘启用”从“需重启”调整为即时：WinUI3 宿主可动态创建/销毁托盘图标；`agent.tray.enabled` 仍是配置事实，保存后立即应用。
@@ -428,7 +449,7 @@ TCP：
 - 表单校验：字段级即时校验 + 保存时整份配置校验；错误定位到字段并在顶部汇总。
 - 脏状态保护：切换页面、关闭窗口、外部修改配置时提示保存/放弃。
 - “需要重启”对话框：列出待重启字段，提供“稍后”和“立即重启应用”；重启沿用同一配置路径。
-- 配置重载期间显示不确定进度条，完成后 InfoBar 汇总“已应用/未生效/需重启”。
+- 配置重载期间显示不确定进度条，完成后以**右下角浮层** InfoBar 汇总“已应用/未生效/需重启”，约 3 秒自动收起，避免遮挡页签与切换操作；启动配置错误仍使用顶部常驻 InfoBar。
 - 空状态：无设备、无脚本时提供主操作按钮与一句说明。
 - 状态胶囊：图标 + 文本 + 颜色；连接/等待/故障/停止与运行时状态一一对应。
 - 可访问性：所有控件有 AutomationProperties.Name；键盘可达；对比度使用主题资源；不依赖悬停展示关键信息。
@@ -445,7 +466,7 @@ TCP：
 | 设备编号 | `deviceId` | 唯一，创建后锁定 |
 | 启用 | `enabled` | 默认 true |
 | 接入方式 | `type` | `serial` / `tcp` / `file` |
-| 设备类型/名称 | `deviceType` / `deviceName` | 设备身份不随 COM 口变化 |
+| 设备名称 | `deviceName` | 设备身份不随 COM 口变化 |
 | 串口端口 | `port` | 字符串；兼容数字写法 |
 | 波特率/数据位/校验/停止位 | `baudRate` / `dataBits` / `parity` / `stopBits` | 枚举大小写不敏感 |
 | DTR/RTS | `dtrEnable` / `rtsEnable` | 布尔 |
@@ -475,6 +496,7 @@ TCP：
 | 本机出口 | `{ "type": "wsServer", "bind", "port", "allowedOrigins", "token" }` | 每个出口独立监听，可创建多个；名称约定 `local` 用于默认入口 |
 | 中心出口 | `{ "type": "wsClient", "url", "token", ... }` | 多个出口可并存，按设备引用 |
 | RabbitMQ 出口 | `{ "type": "rabbitmq", "host", "port", "virtualHost", "userName", "password", "exchange", "exchangeType", "routingKey", "durable", "persistent", ... }` | 生产消息；与中心出口共用 spool 参数 |
+| Kafka 出口 | `{ "type": "kafka", "bootstrapServers", "topic", "messageKey", "securityProtocol", "saslMechanism", "saslUsername", "saslPassword", "sslCaLocation", ... }` | 生产消息；主题/消息键模板与 SASL/SSL 参数；与中心出口共用 spool 参数 |
 
 Agent（`agent`）：
 
@@ -580,7 +602,7 @@ parse(input) → undefined | null | object | object[]
 ```ts
 interface ScriptInput {
   kind: "frame" | "file";
-  device: { deviceId: string; deviceType: string; type: "serial" | "tcp" | "file" };
+  device: { deviceId: string; type: "serial" | "tcp" | "file" };
   text?: string;                 // 可解码时的文本
   bytes: Uint8Array;             // 原始字节（二进制设备使用 DataView）
   fileRef?: { name: string; size: number; sha256: string }; // 文件来源
@@ -1188,7 +1210,7 @@ function parse(input) {
 - 外部修改配置文件与 UI 未保存表单冲突时有明确提示，不丢数据。
 - 100 帧/秒 × 2 台设备时 UI 可交互，设备页与实时页无明显卡顿。
 - 单实例、托盘菜单、退出优雅停止、日志落盘、开机启动路径失效提示均验证通过。
-- 已实施范围：宿主外壳 P0（Core/App 拆分、托盘、单实例、概览页）与设备/出口/Agent 结构化配置编辑；JS 脚本（U3）与运行可视化（U4）待实施。
+- 已实施范围：宿主外壳 P0（Core/App 拆分、托盘、单实例、概览页）、设备/出口/Agent 结构化配置编辑、自定义标题栏、开机自启与进程守护；JS 脚本（U3）与运行可视化（U4）待实施。
 
 ## 12. 开放问题
 
