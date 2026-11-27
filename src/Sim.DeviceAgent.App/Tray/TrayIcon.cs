@@ -56,7 +56,7 @@ internal sealed class TrayIcon : IDisposable
 
     public TrayIcon(string agentId, Action onShow, Action onOpenConfig, Action onReload, Action onExit)
     {
-        _agentId = string.IsNullOrWhiteSpace(agentId) ? "Device Agent" : agentId;
+        _agentId = string.IsNullOrWhiteSpace(agentId) ? "DeviceAgent" : agentId;
         _onShow = onShow;
         _onOpenConfig = onOpenConfig;
         _onReload = onReload;
@@ -182,7 +182,7 @@ internal sealed class TrayIcon : IDisposable
 
     private NOTIFYICONDATAW CreateData()
     {
-        var tooltip = $"Device Agent · {_agentId}";
+        var tooltip = $"DeviceAgent · {_agentId}";
         return new NOTIFYICONDATAW
         {
             cbSize = (uint)Marshal.SizeOf<NOTIFYICONDATAW>(),
@@ -239,7 +239,7 @@ internal sealed class TrayIcon : IDisposable
 
         try
         {
-            AppendMenuW(menu, MF_STRING | MF_GRAYED, 0, $"Device Agent · {_agentId}");
+            AppendMenuW(menu, MF_STRING | MF_GRAYED, 0, $"DeviceAgent · {_agentId}");
             AppendMenuW(menu, MF_SEPARATOR, 0, null);
             AppendMenuW(menu, MF_STRING, CMD_SHOW, "打开主界面");
             AppendMenuW(menu, MF_STRING, CMD_OPEN_CONFIG, "打开配置文件");

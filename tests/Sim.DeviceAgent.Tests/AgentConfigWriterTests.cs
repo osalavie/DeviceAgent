@@ -172,6 +172,70 @@ public sealed class AgentConfigWriterTests
         }
     }
 
+    [Fact]
+    public void Serialize_IsStableAcrossSaveAndReload()
+    {
+        var root = CreateTempDirectory();
+        try
+        {
+            var config = new AgentConfig
+            {
+                Agent = new AgentOptions
+                {
+                    Id = "agent-test",
+                    DisplayName = "Test agent",
+                    StateDirectory = Path.Combine(root, "state")
+                },
+                Sinks = new Dictionary<string, SinkConfig>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["local"] = new SinkConfig
+                    {
+                        Type = "wsServer",
+                        Bind = "127.0.0.1",
+                        Port = 18080
+                    },
+                    ["center"] = new SinkConfig
+                    {
+                        Type = "wsClient",
+                        Url = "ws://127.0.0.1:18081/device"
+                    }
+                },
+                Devices =
+                [
+                    new DeviceConfig
+                    {
+                        DeviceId = "FILE-001",
+                        Type = "file",
+                        DeviceName = "文件接入",
+                        Directory = Path.Combine(root, "in"),
+                        Pattern = "*.*",
+                        QueueCapacity = 1024,
+                        Sinks = ["local"],
+                        Codec = new CodecConfig
+                        {
+                            Type = "passthrough",
+                            Encoding = "utf-8"
+                        }
+                    }
+                ]
+            };
+
+            var path = Path.Combine(root, "agent.json");
+            AgentConfigWriter.Save(path, config);
+
+            var beforeSave = AgentConfigWriter.Serialize(config, root);
+            var loaded = AgentConfigLoader.Load(path);
+            var afterReload = AgentConfigWriter.Serialize(loaded, Path.GetDirectoryName(path)!);
+
+            Assert.Equal(beforeSave, afterReload);
+            Assert.Equal(beforeSave + "\r\n", File.ReadAllText(path));
+        }
+        finally
+        {
+            DeleteDirectory(root);
+        }
+    }
+
     private static string CreateTempDirectory()
     {
         var directory = Path.Combine(

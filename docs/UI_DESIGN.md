@@ -126,7 +126,7 @@ src/
 ## 3. 导航与整体布局
 
 ```text
-┌ Device Agent · A 线测试上位机 ──────────────────────── [运行中]  ─ □ × ┐
+┌ DeviceAgent · A 线测试上位机 ──────────────────────── [运行中]  ─ □ × ┐
 ├──────────────┬─────────────────────────────────────────────────────────┤
 │  概览         │                                                         │
 │  设备         │                    页面内容                              │
@@ -145,7 +145,7 @@ src/
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────┐
-│ Device Agent                                               ─  □  ×  │
+│ DeviceAgent                                               ─  □  ×  │
 ├──────────────────────────────────────────────────────────────────────┤
 │ [运行状态] [配置]                                                     │
 │                                                                      │
@@ -156,8 +156,8 @@ src/
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
-- 标题栏高 48 px（Windows 11 使用 Tall 高度），左侧只显示应用名 `Device Agent`；窗口拖动区域为标题栏空白区，最小化/最大化/关闭使用系统按钮。
-- 删除原页面内的大标题（`Device Agent · 机台名（ID）`）和其下方的 `运行中 · ws://…` 地址行；运行状态、监听地址统一在“运行状态”页查看，窗口底部保留配置文件路径。
+- 标题栏高 48 px（Windows 11 使用 Tall 高度），左侧只显示应用名 `DeviceAgent`；窗口拖动区域为标题栏空白区，最小化/最大化/关闭使用系统按钮。
+- 删除原页面内的大标题（`DeviceAgent · 机台名（ID）`）和其下方的 `运行中 · ws://…` 地址行；运行状态、监听地址统一在“运行状态”页查看，窗口底部保留配置文件路径。
 - 标签页紧贴标题栏（上边距 4 px），不再保留页面级大标题占位。
 
 | 页面 | 导航键 | 核心职责 |
@@ -547,7 +547,7 @@ UI 校验与 `AgentConfigValidator` 共用同一份规则，避免两套逻辑�
 4. 调用现有 `AgentConfigReloader.ReloadAsync`；文件监听触发的重复重载按内容哈希抑制。
 5. 成功：刷新快照并提示应用结果；需要重启的字段进入“需重启”对话框。
 6. 失败：恢复 `.bak` 并重新加载旧配置，错误定位到字段/日志；避免设备长时间处于半停止状态。
-7. 外部修改：监听器先于 UI 感知时，UI 弹出差异提示，不静默丢弃未保存表单。
+7. 外部修改：重载应用成功后，配置页无未保存修改时自动同步磁盘内容（保留当前选中项）；存在未保存修改时保留表单并在消息条提示，不静默丢弃。
 
 ## 6. JS 解析脚本设计
 
@@ -810,7 +810,7 @@ function parse(input) {
     x:Class="Sim.DeviceAgent.App.AppShell"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    Title="Device Agent">
+    Title="DeviceAgent">
 
     <Window.SystemBackdrop>
         <MicaBackdrop />
@@ -1135,7 +1135,7 @@ function parse(input) {
             <TextBlock Text="桌面体验" Style="{ThemeResource SubtitleTextBlockStyle}" />
 
             <controls:SettingsCard Header="开机启动"
-                                   Description="登录 Windows 后自动运行 Device Agent，只驻留托盘。">
+                                   Description="登录 Windows 后自动运行 DeviceAgent，只驻留托盘。">
                 <ToggleSwitch IsOn="{x:Bind ViewModel.StartWithWindows, Mode=TwoWay}" />
             </controls:SettingsCard>
 

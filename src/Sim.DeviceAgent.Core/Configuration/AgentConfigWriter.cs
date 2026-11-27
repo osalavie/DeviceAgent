@@ -25,13 +25,19 @@ public static class AgentConfigWriter
 
         Directory.CreateDirectory(baseDirectory);
 
-        var model = CreateFileModel(config, baseDirectory);
-        var json = JsonSerializer.Serialize(model, Options)
-            .ReplaceLineEndings("\r\n") + "\r\n";
+        var json = Serialize(config, baseDirectory) + "\r\n";
 
         var temporary = fullPath + ".tmp";
         File.WriteAllText(temporary, json, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
         File.Move(temporary, fullPath, overwrite: true);
+    }
+
+    public static string Serialize(AgentConfig config, string baseDirectory)
+    {
+        ArgumentNullException.ThrowIfNull(config);
+
+        var model = CreateFileModel(config, baseDirectory);
+        return JsonSerializer.Serialize(model, Options).ReplaceLineEndings("\r\n");
     }
 
     private static AgentFileModel CreateFileModel(AgentConfig config, string baseDirectory)

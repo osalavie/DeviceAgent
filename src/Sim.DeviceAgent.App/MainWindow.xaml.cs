@@ -31,6 +31,7 @@ public sealed partial class MainWindow : Window
     private AgentOptions? _editorAgent;
     private DeviceEntry? _currentDevice;
     private SinkEntry? _currentSink;
+    private string? _editorSnapshot;
     private bool _configReady;
     private bool _suppressDeviceSelection;
     private bool _suppressSinkSelection;
@@ -62,7 +63,7 @@ public sealed partial class MainWindow : Window
 
         _host = host;
         _configPath = Path.GetFullPath(configPath);
-        Title = "Device Agent";
+        Title = "DeviceAgent";
         AppWindow.Resize(new Windows.Graphics.SizeInt32(1220, 820));
         AppWindow.Closing += OnClosing;
         DeviceList.ItemsSource = _devices;
@@ -205,7 +206,11 @@ public sealed partial class MainWindow : Window
         {
             _lastReloadSuccessAt = status.LastSuccessAt;
             _lastReloadError = status.LastError;
-            ShowConfigMessage(status.LastMessage, InfoBarSeverity.Success);
+            if (!TrySyncEditorWithExternalReload())
+            {
+                ShowConfigMessage(status.LastMessage, InfoBarSeverity.Success);
+            }
+
             return;
         }
 
@@ -236,8 +241,103 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void InitializeConfigEditor()
+    private bool TrySyncEditorWithExternalReload()
     {
+        if (!_configReady)
+        {
+            InitializeConfigEditor("检测到配置文件已更新，配置页已自动同步。");
+            return true;
+        }
+
+        AgentConfig disk;
+        string diskSnapshot;
+        try
+        {
+            disk = AgentConfigLoader.Load(_configPath);
+            NormalizeDisplayTokens(disk, ConfigFileTokens.Read(_configPath));
+            diskSnapshot = AgentConfigWriter.Serialize(disk, Path.GetDirectoryName(_configPath)!);
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+
+        if (_editorSnapshot is not null &&
+            string.Equals(diskSnapshot, _editorSnapshot, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (IsEditorDirty())
+        {
+            ShowConfigMessage(
+                "配置文件已在外部更新；配置页保留了未保存的修改，点击“从磁盘重新载入”可载入最新配置。",
+                InfoBarSeverity.Warning);
+            return true;
+        }
+
+        InitializeConfigEditor("检测到配置文件已更新，配置页已自动同步。");
+        return true;
+    }
+
+    private bool IsEditorDirty()
+    {
+        if (_editorSnapshot is null)
+        {
+            return true;
+        }
+
+        ApplyAgentForm();
+        ApplyCurrentDeviceForm();
+        ApplyCurrentSinkForm();
+
+        try
+        {
+            return !string.Equals(SerializeEditorModel(), _editorSnapshot, StringComparison.Ordinal);
+        }
+        catch (Exception)
+        {
+            return true;
+        }
+    }
+
+    private void CaptureEditorSnapshot()
+    {
+        ApplyAgentForm();
+        ApplyCurrentDeviceForm();
+        ApplyCurrentSinkForm();
+
+        try
+        {
+            _editorSnapshot = SerializeEditorModel();
+        }
+        catch (Exception)
+        {
+            _editorSnapshot = null;
+        }
+    }
+
+    private string SerializeEditorModel()
+    {
+        var config = new AgentConfig
+        {
+            Agent = _editorAgent ?? new AgentOptions(),
+            Sinks = _sinkEntries.ToDictionary(
+                entry => entry.Id,
+                entry => entry.Config,
+                StringComparer.OrdinalIgnoreCase),
+            Devices = _deviceEntries.Select(entry => entry.Config).ToList()
+        };
+
+        return AgentConfigWriter.Serialize(config, Path.GetDirectoryName(_configPath)!);
+    }
+
+    private void InitializeConfigEditor(string? loadedNotice = null)
+    {
+        var previousDeviceId = _currentDevice?.Config.DeviceId;
+        var previousSinkId = _currentSink?.Id;
+        var previousNavIndex = ConfigNavList.SelectedIndex;
+
         _suppressDeviceSelection = true;
         _suppressSinkSelection = true;
         _deviceEntries.Clear();
@@ -247,16 +347,13 @@ public sealed partial class MainWindow : Window
         _currentDevice = null;
         _currentSink = null;
         _editorAgent = null;
+        _editorSnapshot = null;
         _configReady = false;
 
         try
         {
             var config = AgentConfigLoader.Load(_configPath);
-            var rawTokens = ConfigFileTokens.Read(_configPath);
-            var wsEnvTokenActive = !string.IsNullOrWhiteSpace(
-                Environment.GetEnvironmentVariable(AgentConfigLoader.TokenEnvironmentVariable));
-            var centerEnvTokenActive = !string.IsNullOrWhiteSpace(
-                Environment.GetEnvironmentVariable(AgentConfigLoader.CenterTokenEnvironmentVariable));
+            NormalizeDisplayTokens(config, ConfigFileTokens.Read(_configPath));
 
             _editorAgent = config.Agent;
             foreach (var device in config.Devices)
@@ -271,16 +368,6 @@ public sealed partial class MainWindow : Window
                     continue;
                 }
 
-                var isWsServer = string.Equals(sink.Type, "wsServer", StringComparison.OrdinalIgnoreCase);
-                var isWsClient = string.Equals(sink.Type, "wsClient", StringComparison.OrdinalIgnoreCase);
-                var envOverrideActive = isWsServer ? wsEnvTokenActive : isWsClient && centerEnvTokenActive;
-                if (envOverrideActive)
-                {
-                    sink.Token = rawTokens.SinkTokens.TryGetValue(sinkId, out var rawToken)
-                        ? rawToken
-                        : isWsServer && rawTokens.LocalToken is not null ? rawTokens.LocalToken : string.Empty;
-                }
-
                 _sinkEntries.Add(new SinkEntry(sinkId, sink));
             }
 
@@ -289,7 +376,7 @@ public sealed partial class MainWindow : Window
             var errors = AgentConfigValidator.Validate(config);
             ShowConfigMessage(
                 errors.Count == 0
-                    ? "配置文件已载入。修改后点击“保存并应用”。"
+                    ? loadedNotice ?? "配置文件已载入。修改后点击“保存并应用”。"
                     : $"配置文件已载入，但校验未通过：{string.Join("；", errors)}",
                 errors.Count == 0 ? InfoBarSeverity.Success : InfoBarSeverity.Warning);
         }
@@ -305,16 +392,55 @@ public sealed partial class MainWindow : Window
         SaveStatusText.Text = _configReady ? string.Empty : "配置未载入";
 
         LoadAgentForm();
-        ConfigNavList.SelectedIndex = 0;
-        SelectInitialEntries();
+        ConfigNavList.SelectedIndex = previousNavIndex >= 0 ? previousNavIndex : 0;
+        SelectInitialEntries(previousDeviceId, previousSinkId);
+
+        if (_configReady)
+        {
+            CaptureEditorSnapshot();
+        }
     }
 
-    private void SelectInitialEntries()
+    private static void NormalizeDisplayTokens(
+        AgentConfig config,
+        (string? LocalToken, Dictionary<string, string> SinkTokens) rawTokens)
+    {
+        var wsEnvTokenActive = !string.IsNullOrWhiteSpace(
+            Environment.GetEnvironmentVariable(AgentConfigLoader.TokenEnvironmentVariable));
+        var centerEnvTokenActive = !string.IsNullOrWhiteSpace(
+            Environment.GetEnvironmentVariable(AgentConfigLoader.CenterTokenEnvironmentVariable));
+
+        foreach (var (sinkId, sink) in config.Sinks)
+        {
+            if (sink is null)
+            {
+                continue;
+            }
+
+            var isWsServer = string.Equals(sink.Type, "wsServer", StringComparison.OrdinalIgnoreCase);
+            var isWsClient = string.Equals(sink.Type, "wsClient", StringComparison.OrdinalIgnoreCase);
+            var envOverrideActive = isWsServer ? wsEnvTokenActive : isWsClient && centerEnvTokenActive;
+            if (envOverrideActive)
+            {
+                sink.Token = rawTokens.SinkTokens.TryGetValue(sinkId, out var rawToken)
+                    ? rawToken
+                    : isWsServer && rawTokens.LocalToken is not null ? rawTokens.LocalToken : string.Empty;
+            }
+        }
+    }
+
+    private void SelectInitialEntries(string? preferredDeviceId = null, string? preferredSinkId = null)
     {
         _suppressDeviceSelection = true;
         _suppressSinkSelection = true;
-        ConfigDeviceList.SelectedIndex = _deviceEntries.Count > 0 ? 0 : -1;
-        ConfigSinkList.SelectedIndex = _sinkEntries.Count > 0 ? 0 : -1;
+        ConfigDeviceList.SelectedIndex = ResolveSelectionIndex(
+            _deviceEntries,
+            entry => entry.Config.DeviceId,
+            preferredDeviceId);
+        ConfigSinkList.SelectedIndex = ResolveSelectionIndex(
+            _sinkEntries,
+            entry => entry.Id,
+            preferredSinkId);
         _suppressDeviceSelection = false;
         _suppressSinkSelection = false;
 
@@ -322,6 +448,25 @@ public sealed partial class MainWindow : Window
         _currentSink = ConfigSinkList.SelectedItem as SinkEntry;
         LoadDeviceForm(_currentDevice);
         LoadSinkForm(_currentSink);
+    }
+
+    private static int ResolveSelectionIndex<T>(
+        IReadOnlyList<T> items,
+        Func<T, string?> keySelector,
+        string? preferredKey)
+    {
+        if (!string.IsNullOrWhiteSpace(preferredKey))
+        {
+            for (var index = 0; index < items.Count; index++)
+            {
+                if (string.Equals(keySelector(items[index]), preferredKey, StringComparison.OrdinalIgnoreCase))
+                {
+                    return index;
+                }
+            }
+        }
+
+        return items.Count > 0 ? 0 : -1;
     }
 
     private void OnConfigNavSelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -1200,11 +1345,12 @@ public sealed partial class MainWindow : Window
 
         DeviceIdBox.IsReadOnly = true;
         SaveStatusText.Text = $"已保存 {DateTimeOffset.Now:HH:mm:ss}";
+        CaptureEditorSnapshot();
 
         if (_host is null)
         {
             ShowConfigMessage(
-                "配置已保存；当前没有运行中的实例，请重启 Device Agent 后生效。",
+                "配置已保存；当前没有运行中的实例，请重启 DeviceAgent 后生效。",
                 InfoBarSeverity.Success);
             return;
         }
@@ -1261,6 +1407,7 @@ public sealed partial class MainWindow : Window
         _currentDevice = null;
         _currentSink = null;
         _configReady = true;
+        _editorSnapshot = null;
         NewConfigButton.Visibility = Visibility.Collapsed;
         SaveConfigButton.IsEnabled = true;
         SaveStatusText.Text = string.Empty;

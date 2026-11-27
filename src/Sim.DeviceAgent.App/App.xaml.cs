@@ -109,7 +109,7 @@ public partial class App : Application
             try
             {
                 _tray = new TrayIcon(
-                    config?.Agent.Id ?? "Device Agent",
+                    config?.Agent.Id ?? "DeviceAgent",
                     onShow: ShowMainWindow,
                     onOpenConfig: OpenConfigFile,
                     onReload: () => _ = ReloadAsync(),
@@ -209,7 +209,7 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
-            _tray?.ShowBalloon("Device Agent", $"无法打开配置文件：{ex.Message}");
+            _tray?.ShowBalloon("DeviceAgent", $"无法打开配置文件：{ex.Message}");
         }
     }
 
@@ -217,7 +217,7 @@ public partial class App : Application
     {
         if (_host is null)
         {
-            _tray?.ShowBalloon("Device Agent", "当前没有可用的运行配置。");
+            _tray?.ShowBalloon("DeviceAgent", "当前没有可用的运行配置。");
             return;
         }
 
@@ -225,11 +225,11 @@ public partial class App : Application
         {
             var result = await _host.Reloader.ReloadAsync(CancellationToken.None, force: true);
             var message = result.Success ? "配置已重新加载。" : $"配置重载失败：{result.Message}";
-            _dispatcherQueue.TryEnqueue(() => _tray?.ShowBalloon("Device Agent", message));
+            _dispatcherQueue.TryEnqueue(() => _tray?.ShowBalloon("DeviceAgent", message));
         }
         catch (Exception ex)
         {
-            _dispatcherQueue.TryEnqueue(() => _tray?.ShowBalloon("Device Agent", $"配置重载失败：{ex.Message}"));
+            _dispatcherQueue.TryEnqueue(() => _tray?.ShowBalloon("DeviceAgent", $"配置重载失败：{ex.Message}"));
         }
     }
 
