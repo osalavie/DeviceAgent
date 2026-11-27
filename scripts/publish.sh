@@ -143,7 +143,7 @@ if $trim && $self_contained; then
 else
     trim=false
 fi
-if $compress && $single_file; then
+if $compress && $single_file && $self_contained; then
     publish_args+=(-p:EnableCompressionInSingleFile=true)
 else
     compress=false

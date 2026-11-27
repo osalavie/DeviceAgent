@@ -60,7 +60,7 @@ New-Item -ItemType Directory -Path $Output -Force | Out-Null
 $selfContainedValue = if ($FrameworkDependent) { "false" } else { "true" }
 $singleFile = -not $NoSingleFile
 $trim = -not $FrameworkDependent -and -not $NoTrim
-$compress = $singleFile -and -not $NoCompress
+$compress = $singleFile -and -not $FrameworkDependent -and -not $NoCompress
 $dotnetArgs = @(
     "publish",
     (Join-Path $ToolRoot "src\Sim.DeviceAgent.App"),
