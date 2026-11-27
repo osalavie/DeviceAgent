@@ -106,7 +106,7 @@ powershell -File scripts/publish.ps1
 bash scripts/publish.sh
 ```
 
-脚本参数两版一致：位置参数或 `-Output` / `-o` 指定发布目录，例如 `powershell -File scripts/publish.ps1 D:\release\Agent`、`bash scripts/publish.sh /mnt/d/release/Agent`；`-NoSingleFile` / `--no-single-file` 改为目录发布；`-FrameworkDependent` / `--framework-dependent` 改为框架依赖发布（目标机需预装 .NET 10 Desktop Runtime，Windows App SDK 仍随包携带，裁剪自动关闭）；`-NoTrim` / `--no-trim` 关闭裁剪；`-NoCompress` / `--no-compress` 关闭单文件压缩；另有 `-Configuration` / `-c`、`-RuntimeIdentifier` / `-r`。默认目录 `artifacts/publish/<rid>` 每次发布前清空；自定义目录默认保留既有文件（避免误删 `agent.json`、`data/`），需要清空时加 `-Clean` / `--clean`。脚本拒绝发布到工具目录及其上级目录。单文件 exe 启动时自解压到 `%TEMP%\.net`，语言资源随包内嵌、不产生语言文件夹，配置仍按 exe 所在目录解析。
+脚本参数两版一致：位置参数或 `-Output` / `-o` 指定发布目录，例如 `powershell -File scripts/publish.ps1 D:\release\Agent`、`bash scripts/publish.sh /mnt/d/release/Agent`；`-NoSingleFile` / `--no-single-file` 改为目录发布；`-FrameworkDependent` / `--framework-dependent` 改为框架依赖发布（目标机需预装 .NET 10 Desktop Runtime，Windows App SDK 仍随包携带，裁剪与压缩自动关闭）；`-NoTrim` / `--no-trim` 关闭裁剪；`-NoCompress` / `--no-compress` 关闭单文件压缩；另有 `-Configuration` / `-c`、`-RuntimeIdentifier` / `-r`。默认目录 `artifacts/publish/<rid>` 每次发布前清空；自定义目录默认保留既有文件（避免误删 `agent.json`、`data/`），需要清空时加 `-Clean` / `--clean`。脚本拒绝发布到工具目录及其上级目录。单文件 exe 启动时自解压到 `%TEMP%\.net`，语言资源随包内嵌、不产生语言文件夹，配置仍按 exe 所在目录解析。
 
 体积优化要点：
 
@@ -114,6 +114,8 @@ bash scripts/publish.sh
 - 裁剪移除未使用的 .NET / ASP.NET Core 代码与 Windows SDK 投影（`Microsoft.Windows.SDK.NET.dll` 由 23.7 MB 降至 0.1 MB）；WinUI / WinRT 投影与本应用程序集显式保留，避免 XAML 与 JSON 反射元数据被裁剪。
 - 配置文件启用 `JsonSerializerIsReflectionEnabledByDefault`，裁剪后仍使用 System.Text.Json 反射序列化读写 `agent.json`。
 - WinUI 3 自 Windows App SDK 1.2 起支持 .NET 裁剪；修改 XAML 或序列化代码后应重新做一次发布冒烟测试。
+
+完整的方案对比、体积测量、踩坑记录与发布冒烟清单见 [docs/PUBLISHING.md](docs/PUBLISHING.md)。
 
 WinUI3 官方推荐目录发布（含 Windows App SDK 运行时，目标机无需预装）：
 

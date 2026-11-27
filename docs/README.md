@@ -9,12 +9,14 @@
 | 1 | [README.md](../README.md) | 项目介绍、已实现/未实现范围、构建、运行、发布、配置要点、WebSocket 协议与 spool 行为 |
 | 2 | [ARCHITECTURE.md](ARCHITECTURE.md) | 采集运行时设计：总体架构、配置模型、接入适配器、编解码、消息协议、可靠性、安全、实施阶段与验收矩阵 |
 | 3 | [UI_DESIGN.md](UI_DESIGN.md) | WinUI3 桌面端设计：宿主与进程结构、导航与页面、配置字段映射、JS 解析脚本、实施计划 |
+| 4 | [PUBLISHING.md](PUBLISHING.md) | 发布打包与体积优化：体积构成与测量、裁剪与压缩措施、反射元数据保留、踩坑记录与发布冒烟清单 |
 
 ## 文档边界
 
 - [README.md](../README.md)：对外入口，维护构建、运行、发布、配置说明，以及“已实现 / 尚未实现”状态。
 - [ARCHITECTURE.md](ARCHITECTURE.md)：采集运行时的设计基线；第 17 节记录设计与实现的差异，实现变化时同步更新。
 - [UI_DESIGN.md](UI_DESIGN.md)：桌面端设计基线；文首状态行记录已实施范围，页面与交互按设计更新。
+- [PUBLISHING.md](PUBLISHING.md)：发布包体积与裁剪基线；发布脚本、依赖或裁剪配置变化时同步更新。
 
 ## 维护约定
 
