@@ -197,7 +197,12 @@ public static class AgentConfigWriter
                 model.Delimiter = codec.Delimiter;
                 if (!string.IsNullOrWhiteSpace(codec.Parse?.Pattern))
                 {
-                    model.Parse = new ParseFileModel { Pattern = codec.Parse.Pattern };
+                    model.Parse = CreateRegexModel(codec.Parse);
+                }
+
+                if (!string.IsNullOrWhiteSpace(codec.Filter?.Pattern))
+                {
+                    model.Filter = CreateRegexModel(codec.Filter);
                 }
 
                 break;
@@ -213,6 +218,13 @@ public static class AgentConfigWriter
 
         return model;
     }
+
+    private static ParseFileModel CreateRegexModel(RegexParseOptions options)
+        => new()
+        {
+            Pattern = options.Pattern,
+            IgnoreCase = options.IgnoreCase ? true : null
+        };
 
     private static string? Optional(string? value, string? defaultValue = null)
         => string.IsNullOrWhiteSpace(value) || string.Equals(value, defaultValue, StringComparison.OrdinalIgnoreCase)
@@ -385,6 +397,8 @@ public static class AgentConfigWriter
 
         public ParseFileModel? Parse { get; set; }
 
+        public ParseFileModel? Filter { get; set; }
+
         public string? CsvDelimiter { get; set; }
 
         public bool? HasHeader { get; set; }
@@ -395,5 +409,7 @@ public static class AgentConfigWriter
     private sealed class ParseFileModel
     {
         public string Pattern { get; set; } = string.Empty;
+
+        public bool? IgnoreCase { get; set; }
     }
 }

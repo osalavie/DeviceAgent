@@ -84,7 +84,12 @@ public sealed class AgentConfigWriterTests
                             Encoding = "ascii",
                             Parse = new RegexParseOptions
                             {
-                                Pattern = "^SHEAR,DIE=(?<dieId>\\S+),FORCE=(?<force>\\d+\\.\\d+)N"
+                                Pattern = "^SHEAR,DIE=(?<dieId>\\S+),FORCE=(?<force>\\d+\\.\\d+)N",
+                                IgnoreCase = true
+                            },
+                            Filter = new RegexParseOptions
+                            {
+                                Pattern = "^SHEAR,"
                             }
                         },
                         Sinks = ["local", "center", "mq", "events"]
@@ -155,6 +160,11 @@ public sealed class AgentConfigWriterTests
             Assert.Equal(
                 "^SHEAR,DIE=(?<dieId>\\S+),FORCE=(?<force>\\d+\\.\\d+)N",
                 loaded.Devices[0].Codec.Parse?.Pattern);
+            Assert.Equal("^SHEAR,", loaded.Devices[0].Codec.Filter?.Pattern);
+            Assert.Equal("^SHEAR,", device.GetProperty("codec").GetProperty("filter").GetProperty("pattern").GetString());
+            Assert.True(loaded.Devices[0].Codec.Parse?.IgnoreCase);
+            Assert.True(device.GetProperty("codec").GetProperty("parse").GetProperty("ignoreCase").GetBoolean());
+            Assert.False(device.GetProperty("codec").GetProperty("filter").TryGetProperty("ignoreCase", out _));
         }
         finally
         {

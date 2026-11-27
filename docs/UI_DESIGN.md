@@ -245,12 +245,14 @@ Agent · agent-line-a-01                         [重新加载配置] [打开配
 
 | 类型 | 适用设备 | 主要字段 |
 | --- | --- | --- |
-| `delimiter` 分隔符 + 正则 | 全部 | 分隔符、编码、正则命名组、单帧上限；正则旁提供样例测试 |
+| `delimiter` 分隔符 + 正则 | 全部 | 分隔符、编码、正则命名组、过滤正则、忽略大小写开关（解析/过滤各一）、单帧上限；正则旁提供样例测试 |
 | `passthrough` 直通 | 全部 | 编码 |
 | `csv` | 仅文件 | 列分隔符、编码、表头映射（JSON 键 → 表头名） |
 | `script` JS 脚本 | 全部 | 脚本选择、入口函数、超时、切帧分隔符（串口/TCP）、文件模式（文件）、单帧上限 |
 
 - 选择 `script` 时显示“编辑脚本”链接，跳转解析脚本页并定位到该文件。
+- 过滤正则只决定帧是否入队，不参与分组；分组正则只负责字段提取，两者相互独立。过滤正则为空时全部帧放行；不匹配（含正则超时）的帧在解码阶段直接丢弃，不计数为解析错误。
+- 两个正则输入框右侧各有一个“忽略大小写”开关，对应 `ignoreCase`（默认关）。开关关闭时按原样区分大小写；大小写宽容不要依赖 `(?i)` 等引擎内联选项，保证模式可直接复用到其他正则实现（如前端 JS）。
 - 未选择脚本、脚本不存在、脚本编译失败时不允许“保存并应用”，错误显示在字段下方。
 - 解析器切换后保留原配置字段，但只序列化当前类型使用的字段，避免污染 `agent.json`（见 5.4）。
 
@@ -484,7 +486,7 @@ TCP：
 
 | 类型 | 字段 |
 | --- | --- |
-| `delimiter` | `delimiter`、`encoding`、`parse.pattern`、`maxFrameBytes` |
+| `delimiter` | `delimiter`、`encoding`、`parse.pattern`、`parse.ignoreCase`、`filter.pattern`、`filter.ignoreCase`、`maxFrameBytes` |
 | `passthrough` | `encoding` |
 | `csv` | `csvDelimiter`、`encoding`、`hasHeader`（MVP 必须 true）、`columns`、`maxFrameBytes` |
 | `script` | `script`、`entry`、`delimiter`（串口/TCP 切帧）、`encoding`、`timeoutMs`、`fileMode`（文件）、`maxFrameBytes` |

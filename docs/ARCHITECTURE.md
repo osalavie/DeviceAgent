@@ -134,7 +134,8 @@
       "deviceName": "焊线拉力测试机 01", "port": "COM3", "baudRate": 9600,
       "dataBits": 8, "parity": "None", "stopBits": "One",
       "codec": { "type": "delimiter", "delimiter": "\r\n", "encoding": "ascii",
-                 "parse": { "type": "regex", "pattern": "^RESULT,FORCE=(?<force>\\d+\\.\\d+)N" } },
+                 "filter": { "type": "regex", "pattern": "^RESULT,", "ignoreCase": true },
+                 "parse": { "type": "regex", "pattern": "^RESULT,FORCE=(?<force>\\d+\\.\\d+)N", "ignoreCase": true } },
       "sinks": ["local", "center"] },
     { "deviceId": "DS-001", "type": "serial",
       "deviceName": "Die 焊接推力测试机 01", "port": "COM4", "baudRate": 19200,
@@ -232,6 +233,8 @@
 ### 5.2 解析与容错
 
 - 每帧同时保留 `raw`（Base64）与可选的 `text`、`parsed`；解析失败的帧仍然产出，附 `parseError` 与原始内容，便于现场排查。
+- 分隔符 codec 可选过滤正则（`filter.pattern`）：不匹配的帧在解码阶段直接丢弃（不入队、不上报），与分组正则相互独立；留空时全部帧放行。过滤正则按 250 ms 超时执行，超时按不匹配处理，不计数为解析错误。
+- `parse.ignoreCase` / `filter.ignoreCase`（默认 `false`）控制对应正则的大小写敏感性，替代 `(?i)` 等引擎相关内联选项，使同一模式可复用到其他正则实现。
 - 编码默认按配置的 ASCII/UTF-8/GBK 解码；二进制设备只输出 Base64。
 - 单帧大小上限默认 64 KiB，超限丢弃并产生事件计数，不阻塞后续帧。
 - 解析异常只影响当前帧，不改变通道状态；连续解析失败达到阈值时产生 `channel.degraded` 事件。

@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
 using Sim.DeviceAgent.Codecs;
+using Sim.DeviceAgent.Configuration;
 using Sim.DeviceAgent.Transports;
 using Xunit;
 
@@ -15,6 +16,7 @@ public sealed class CodecTests
             "\r\n",
             Encoding.ASCII,
             new Regex(@"ST,(?<state>GS|US),(?<value>\d+\.\d+)(?<unit>kg|g)", RegexOptions.CultureInvariant),
+            filter: null,
             1024);
         var decoder = codec.CreateDecoder();
 
@@ -32,7 +34,7 @@ public sealed class CodecTests
     [Fact]
     public void DelimiterDecoder_ReportsOversizedFrame()
     {
-        var codec = new DelimiterCodec("\r\n", Encoding.ASCII, parser: null, maxFrameBytes: 8);
+        var codec = new DelimiterCodec("\r\n", Encoding.ASCII, parser: null, filter: null, maxFrameBytes: 8);
         var decoder = codec.CreateDecoder();
 
         var frame = Assert.Single(decoder.Push(Encoding.ASCII.GetBytes("123456789")));
@@ -48,6 +50,7 @@ public sealed class CodecTests
             "\r\n",
             Encoding.ASCII,
             new Regex(@"^RESULT,(?<force>\d+\.\d+)N$", RegexOptions.CultureInvariant),
+            filter: null,
             1024);
         var decoder = codec.CreateDecoder();
 
@@ -56,6 +59,107 @@ public sealed class CodecTests
         Assert.Equal("regex_no_match", frame.ParseError);
         Assert.Equal("NOISE", frame.Text);
         Assert.Null(frame.Parsed);
+    }
+
+    [Fact]
+    public void DelimiterDecoder_FilterDropsFramesThatDoNotMatch()
+    {
+        var codec = new DelimiterCodec(
+            "\r\n",
+            Encoding.ASCII,
+            new Regex(@"^ST,(?<value>\d+\.\d+)kg$", RegexOptions.CultureInvariant),
+            new Regex("^ST,", RegexOptions.CultureInvariant),
+            1024);
+        var decoder = codec.CreateDecoder();
+
+        var frames = decoder.Push(Encoding.ASCII.GetBytes("ST,12.345kg\r\nNOISE\r\n"));
+
+        var frame = Assert.Single(frames);
+        Assert.Equal("ST,12.345kg", frame.Text);
+        Assert.Equal(12.345m, frame.Parsed!.Value.GetProperty("value").GetDecimal());
+    }
+
+    [Fact]
+    public void DelimiterDecoder_FilterKeepsFrameWhenParseDoesNotMatch()
+    {
+        var codec = new DelimiterCodec(
+            "\r\n",
+            Encoding.ASCII,
+            new Regex(@"^RESULT,(?<force>\d+\.\d+)N$", RegexOptions.CultureInvariant),
+            new Regex("^RESULT,", RegexOptions.CultureInvariant),
+            1024);
+        var decoder = codec.CreateDecoder();
+
+        var frame = Assert.Single(decoder.Push(Encoding.ASCII.GetBytes("RESULT,BAD\r\n")));
+
+        Assert.Equal("regex_no_match", frame.ParseError);
+    }
+
+    [Fact]
+    public void DelimiterDecoder_NullFilterAllowsAllFrames_AndFilterAppliesToFlush()
+    {
+        var unfiltered = new DelimiterCodec(
+                "\r\n",
+                Encoding.ASCII,
+                parser: null,
+                filter: null,
+                maxFrameBytes: 1024)
+            .CreateDecoder();
+        Assert.Equal(2, unfiltered.Push(Encoding.ASCII.GetBytes("A\r\nB\r\n")).Count);
+
+        var filtered = new DelimiterCodec(
+                "\r\n",
+                Encoding.ASCII,
+                parser: null,
+                new Regex("^A", RegexOptions.CultureInvariant),
+                maxFrameBytes: 1024)
+            .CreateDecoder();
+        Assert.Empty(filtered.Push(Encoding.ASCII.GetBytes("NOISE")));
+        Assert.Empty(filtered.Flush());
+        Assert.Empty(filtered.Push(Encoding.ASCII.GetBytes("A1")));
+        Assert.Single(filtered.Flush());
+    }
+
+    [Fact]
+    public void CodecFactory_IgnoreCase_AppliesToParseAndFilter()
+    {
+        var config = new CodecConfig
+        {
+            Type = "delimiter",
+            Delimiter = "\n",
+            Parse = new RegexParseOptions
+            {
+                Pattern = @"^(?<state>ST|US)\s+(?<value>[+-]?\d+(?:\.\d+)?)\s*(?<unit>kg|g)\s*(?<weightType>nt|gs)$",
+                IgnoreCase = true
+            },
+            Filter = new RegexParseOptions
+            {
+                Pattern = "^ST\\s",
+                IgnoreCase = true
+            }
+        };
+        var decoder = CodecFactory.Create(config, "serial").CreateDecoder();
+
+        var frame = Assert.Single(decoder.Push(Encoding.ASCII.GetBytes("st 12.3 KG NT\n")));
+
+        Assert.Equal("st", frame.Parsed!.Value.GetProperty("state").GetString());
+        Assert.Equal(12.3m, frame.Parsed!.Value.GetProperty("value").GetDecimal());
+        Assert.Equal("KG", frame.Parsed!.Value.GetProperty("unit").GetString());
+    }
+
+    [Fact]
+    public void CodecFactory_WithoutIgnoreCase_IsCaseSensitive()
+    {
+        var config = new CodecConfig
+        {
+            Type = "delimiter",
+            Delimiter = "\n",
+            Filter = new RegexParseOptions { Pattern = "^ST " }
+        };
+        var decoder = CodecFactory.Create(config, "serial").CreateDecoder();
+
+        Assert.Empty(decoder.Push(Encoding.ASCII.GetBytes("st 12.3 kg\n")));
+        Assert.Single(decoder.Push(Encoding.ASCII.GetBytes("ST 12.3 kg\n")));
     }
 
     [Fact]

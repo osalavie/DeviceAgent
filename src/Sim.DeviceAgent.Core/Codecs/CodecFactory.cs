@@ -19,18 +19,20 @@ public static class CodecFactory
     }
 
     private static IDeviceCodec CreateDelimiter(CodecConfig config, System.Text.Encoding encoding)
-    {
-        Regex? parser = null;
-        if (!string.IsNullOrWhiteSpace(config.Parse?.Pattern))
-        {
-            parser = new Regex(
-                config.Parse.Pattern,
-                RegexOptions.CultureInvariant,
-                TimeSpan.FromMilliseconds(250));
-        }
+        => new DelimiterCodec(
+            config.Delimiter,
+            encoding,
+            CompileRegex(config.Parse?.Pattern, config.Parse?.IgnoreCase ?? false),
+            CompileRegex(config.Filter?.Pattern, config.Filter?.IgnoreCase ?? false),
+            config.MaxFrameBytes);
 
-        return new DelimiterCodec(config.Delimiter, encoding, parser, config.MaxFrameBytes);
-    }
+    private static Regex? CompileRegex(string? pattern, bool ignoreCase)
+        => string.IsNullOrWhiteSpace(pattern)
+            ? null
+            : new Regex(
+                pattern,
+                RegexOptions.CultureInvariant | (ignoreCase ? RegexOptions.IgnoreCase : RegexOptions.None),
+                TimeSpan.FromMilliseconds(250));
 
     private static IDeviceCodec CreateCsv(CodecConfig config, System.Text.Encoding encoding, string transportType)
     {

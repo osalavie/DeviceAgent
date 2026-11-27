@@ -8,9 +8,10 @@ public sealed class DelimiterCodec : DeviceCodecBase
     private readonly byte[] _delimiter;
     private readonly Encoding _encoding;
     private readonly Regex? _parser;
+    private readonly Regex? _filter;
     private readonly int _maxFrameBytes;
 
-    public DelimiterCodec(string delimiter, Encoding encoding, Regex? parser, int maxFrameBytes)
+    public DelimiterCodec(string delimiter, Encoding encoding, Regex? parser, Regex? filter, int maxFrameBytes)
     {
         if (string.IsNullOrEmpty(delimiter))
         {
@@ -20,26 +21,29 @@ public sealed class DelimiterCodec : DeviceCodecBase
         _delimiter = Encoding.UTF8.GetBytes(delimiter);
         _encoding = encoding;
         _parser = parser;
+        _filter = filter;
         _maxFrameBytes = maxFrameBytes;
     }
 
     public override string Type => "delimiter";
 
-    public override IFrameDecoder CreateDecoder() => new DelimiterDecoder(_delimiter, _encoding, _parser, _maxFrameBytes);
+    public override IFrameDecoder CreateDecoder() => new DelimiterDecoder(_delimiter, _encoding, _parser, _filter, _maxFrameBytes);
 
     private sealed class DelimiterDecoder : IFrameDecoder
     {
         private readonly byte[] _delimiter;
         private readonly Encoding _encoding;
         private readonly Regex? _parser;
+        private readonly Regex? _filter;
         private readonly int _maxFrameBytes;
         private readonly ByteBuffer _buffer = new();
 
-        public DelimiterDecoder(byte[] delimiter, Encoding encoding, Regex? parser, int maxFrameBytes)
+        public DelimiterDecoder(byte[] delimiter, Encoding encoding, Regex? parser, Regex? filter, int maxFrameBytes)
         {
             _delimiter = delimiter;
             _encoding = encoding;
             _parser = parser;
+            _filter = filter;
             _maxFrameBytes = maxFrameBytes;
         }
 
@@ -56,7 +60,11 @@ public sealed class DelimiterCodec : DeviceCodecBase
                 {
                     var raw = span[..delimiterIndex].ToArray();
                     _buffer.Consume(delimiterIndex + _delimiter.Length);
-                    frames.Add(FrameParser.Parse(raw, _encoding, _parser));
+                    if (FrameParser.Parse(raw, _encoding, _parser, _filter) is { } frame)
+                    {
+                        frames.Add(frame);
+                    }
+
                     continue;
                 }
 
@@ -82,7 +90,7 @@ public sealed class DelimiterCodec : DeviceCodecBase
 
             var raw = _buffer.Span.ToArray();
             _buffer.Clear();
-            return [FrameParser.Parse(raw, _encoding, _parser)];
+            return FrameParser.Parse(raw, _encoding, _parser, _filter) is { } frame ? [frame] : [];
         }
     }
 }

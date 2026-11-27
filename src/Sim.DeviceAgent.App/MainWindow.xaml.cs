@@ -117,6 +117,7 @@ public sealed partial class MainWindow : Window
                      ErrorDirectoryBox,
                      DelimiterBox,
                      ParsePatternBox,
+                     FilterPatternBox,
                      CsvDelimiterBox,
                      CsvColumnsBox,
                      SinkIdBox,
@@ -421,6 +422,9 @@ public sealed partial class MainWindow : Window
         MaxFrameBytesBox.Value = codec.MaxFrameBytes;
         DelimiterBox.Text = EscapeDelimiter(codec.Delimiter);
         ParsePatternBox.Text = codec.Parse?.Pattern ?? string.Empty;
+        ParseIgnoreCaseToggle.IsOn = codec.Parse?.IgnoreCase ?? false;
+        FilterPatternBox.Text = codec.Filter?.Pattern ?? string.Empty;
+        FilterIgnoreCaseToggle.IsOn = codec.Filter?.IgnoreCase ?? false;
         CsvDelimiterBox.Text = codec.CsvDelimiter;
         CsvColumnsBox.Text = FormatColumns(codec.Columns);
 
@@ -482,7 +486,18 @@ public sealed partial class MainWindow : Window
         codec.Delimiter = UnescapeDelimiter(DelimiterBox.Text);
         codec.Parse = string.IsNullOrWhiteSpace(ParsePatternBox.Text)
             ? null
-            : new RegexParseOptions { Pattern = ParsePatternBox.Text.Trim() };
+            : new RegexParseOptions
+            {
+                Pattern = ParsePatternBox.Text.Trim(),
+                IgnoreCase = ParseIgnoreCaseToggle.IsOn
+            };
+        codec.Filter = string.IsNullOrWhiteSpace(FilterPatternBox.Text)
+            ? null
+            : new RegexParseOptions
+            {
+                Pattern = FilterPatternBox.Text.Trim(),
+                IgnoreCase = FilterIgnoreCaseToggle.IsOn
+            };
         codec.CsvDelimiter = DefaultIfEmpty(CsvDelimiterBox.Text, ",");
         codec.HasHeader = true;
         codec.Columns = ParseColumns(CsvColumnsBox.Text);
@@ -577,6 +592,7 @@ public sealed partial class MainWindow : Window
     private void UpdateCodecVisibility()
     {
         var type = NormalizeCodecType(GetComboText(CodecTypeCombo));
+        DelimiterPanel.Visibility = type == "delimiter" ? Visibility.Visible : Visibility.Collapsed;
         DelimiterFields.Visibility = type == "delimiter" ? Visibility.Visible : Visibility.Collapsed;
         PassthroughFields.Visibility = type == "passthrough" ? Visibility.Visible : Visibility.Collapsed;
         CsvFields.Visibility = type == "csv" ? Visibility.Visible : Visibility.Collapsed;

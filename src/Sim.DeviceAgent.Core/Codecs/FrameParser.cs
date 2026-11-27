@@ -7,9 +7,24 @@ namespace Sim.DeviceAgent.Codecs;
 
 public static class FrameParser
 {
-    public static DecodedFrame Parse(byte[] raw, Encoding encoding, Regex? parser)
+    public static DecodedFrame? Parse(byte[] raw, Encoding encoding, Regex? parser, Regex? filter = null)
     {
         var text = encoding.GetString(raw);
+        if (filter is not null)
+        {
+            try
+            {
+                if (!filter.IsMatch(text))
+                {
+                    return null;
+                }
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                return null;
+            }
+        }
+
         if (parser is null)
         {
             return new DecodedFrame(raw, text, null, null);

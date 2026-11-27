@@ -170,6 +170,8 @@ public sealed class CodecConfig
 
     public RegexParseOptions? Parse { get; set; }
 
+    public RegexParseOptions? Filter { get; set; }
+
     public string CsvDelimiter { get; set; } = ",";
 
     public bool HasHeader { get; set; } = true;
@@ -184,6 +186,8 @@ public sealed class RegexParseOptions
     public string Type { get; set; } = "regex";
 
     public string Pattern { get; set; } = string.Empty;
+
+    public bool IgnoreCase { get; set; }
 }
 
 public sealed class FlexibleStringJsonConverter : JsonConverter<string>

@@ -24,7 +24,7 @@ public sealed class PassthroughCodec : DeviceCodecBase
     {
         using var buffer = new MemoryStream();
         await stream.CopyToAsync(buffer, cancellationToken);
-        yield return FrameParser.Parse(buffer.ToArray(), _encoding, null);
+        yield return FrameParser.Parse(buffer.ToArray(), _encoding, parser: null)!;
     }
 
     private sealed class PassthroughDecoder : IFrameDecoder
@@ -44,7 +44,7 @@ public sealed class PassthroughCodec : DeviceCodecBase
             }
 
             var raw = data.ToArray();
-            return [FrameParser.Parse(raw, _encoding, null)];
+            return [FrameParser.Parse(raw, _encoding, parser: null)!];
         }
 
         public IReadOnlyList<DecodedFrame> Flush() => [];

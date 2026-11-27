@@ -99,6 +99,24 @@ public sealed class ConfigValidatorTests
     }
 
     [Fact]
+    public void InvalidFilterRegex_IsRejected()
+    {
+        var config = CreateValidConfig();
+        config.Devices[0].Type = "serial";
+        config.Devices[0].Port = "COM9";
+        config.Devices[0].Codec = new CodecConfig
+        {
+            Type = "delimiter",
+            Delimiter = "\r\n",
+            Filter = new RegexParseOptions { Pattern = "(" }
+        };
+
+        var errors = AgentConfigValidator.Validate(config);
+
+        Assert.Contains(errors, error => error.Contains("regex filter", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void NonLoopbackBind_IsRejected()
     {
         var config = CreateValidConfig();

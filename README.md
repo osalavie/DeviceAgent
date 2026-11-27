@@ -188,7 +188,7 @@ Kafka 投递行为：信封先写 spool，再按设备顺序生产；生产者�
 
 编解码字段：
 
-- `delimiter`：`delimiter`、`encoding`、`parse.pattern`（正则命名组会转为 JSON 字段）、`maxFrameBytes`。
+- `delimiter`：`delimiter`、`encoding`、`parse.pattern`（正则命名组会转为 JSON 字段）、`parse.ignoreCase`、`filter.pattern`（准入过滤正则，不匹配的帧不入队；留空时全部放行）、`filter.ignoreCase`、`maxFrameBytes`。`ignoreCase` 默认 `false`，由界面"忽略大小写"开关控制，无需在模式里写 `(?i)` 等引擎相关内联选项。
 - `passthrough`：`encoding`。
 - `csv`：`csvDelimiter`、`hasHeader`（MVP 必须为 `true`）、`columns`（JSON 键 → CSV 表头名）、`encoding`。
 

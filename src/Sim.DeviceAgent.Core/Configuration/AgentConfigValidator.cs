@@ -329,7 +329,12 @@ public static class AgentConfigValidator
 
                 if (!string.IsNullOrWhiteSpace(codec.Parse?.Pattern))
                 {
-                    ValidateRegex(label, codec.Parse.Pattern, errors);
+                    ValidateRegex(label, "parse", codec.Parse.Pattern, errors);
+                }
+
+                if (!string.IsNullOrWhiteSpace(codec.Filter?.Pattern))
+                {
+                    ValidateRegex(label, "filter", codec.Filter.Pattern, errors);
                 }
 
                 break;
@@ -371,7 +376,7 @@ public static class AgentConfigValidator
         }
     }
 
-    private static void ValidateRegex(string deviceLabel, string pattern, List<string> errors)
+    private static void ValidateRegex(string deviceLabel, string field, string pattern, List<string> errors)
     {
         try
         {
@@ -379,7 +384,7 @@ public static class AgentConfigValidator
         }
         catch (ArgumentException ex)
         {
-            errors.Add($"Device '{deviceLabel}' regex parse pattern is invalid: {ex.Message}");
+            errors.Add($"Device '{deviceLabel}' regex {field} pattern is invalid: {ex.Message}");
         }
     }
 

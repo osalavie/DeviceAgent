@@ -419,26 +419,50 @@
                                                 Minimum="64"
                                                 SpinButtonPlacementMode="Compact" />
                                         </StackPanel>
+
+                                        <StackPanel x:Name="DelimiterPanel" Grid.Column="3" Spacing="4">
+                                            <TextBlock FontSize="12" Opacity="0.7" Text="分隔符（支持 \r \n \t 转义）" />
+                                            <TextBox x:Name="DelimiterBox" PlaceholderText="\r\n" />
+                                        </StackPanel>
                                     </Grid>
 
                                     <StackPanel x:Name="DelimiterFields" Spacing="10">
-                                        <Grid ColumnSpacing="12" RowSpacing="10">
+                                        <Grid ColumnSpacing="12">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
 
                                             <StackPanel Spacing="4">
-                                                <TextBlock FontSize="12" Opacity="0.7" Text="分隔符（支持 \r \n \t 转义）" />
-                                                <TextBox x:Name="DelimiterBox" PlaceholderText="\r\n" />
-                                            </StackPanel>
-
-                                            <StackPanel Grid.Column="1" Grid.ColumnSpan="3" Spacing="4">
                                                 <TextBlock FontSize="12" Opacity="0.7" Text="正则解析（命名组转为字段，可留空）" />
                                                 <TextBox x:Name="ParsePatternBox" PlaceholderText="^RESULT,FORCE=(?&lt;force&gt;\d+\.\d+)N" />
                                             </StackPanel>
+
+                                            <ToggleSwitch
+                                                x:Name="ParseIgnoreCaseToggle"
+                                                Grid.Column="1"
+                                                VerticalAlignment="Bottom"
+                                                OffContent="区分大小写"
+                                                OnContent="忽略大小写" />
+                                        </Grid>
+
+                                        <Grid ColumnSpacing="12">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+
+                                            <StackPanel Spacing="4">
+                                                <TextBlock FontSize="12" Opacity="0.7" Text="过滤正则（不匹配的帧不入队，可留空）" />
+                                                <TextBox x:Name="FilterPatternBox" PlaceholderText="^RESULT," />
+                                            </StackPanel>
+
+                                            <ToggleSwitch
+                                                x:Name="FilterIgnoreCaseToggle"
+                                                Grid.Column="1"
+                                                VerticalAlignment="Bottom"
+                                                OffContent="区分大小写"
+                                                OnContent="忽略大小写" />
                                         </Grid>
                                     </StackPanel>
 
