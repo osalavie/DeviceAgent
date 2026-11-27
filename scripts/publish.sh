@@ -11,6 +11,8 @@ Usage: publish.sh [output-dir] [options]
   -o, --output <dir>           Output directory (default: artifacts/publish/<rid>)
       --no-single-file         Publish as a folder instead of a single exe
       --framework-dependent    Framework-dependent publish (requires .NET 10 Desktop Runtime)
+      --no-trim                Disable trimming (trimming is on by default for self-contained)
+      --no-compress            Disable single-file compression
       --clean                  Clear the output directory before publishing
                                (default output artifacts/publish/<rid> is always cleared)
   -h, --help                   Show this help
@@ -26,6 +28,8 @@ output=""
 clean=false
 single_file=true
 self_contained=true
+trim=true
+compress=true
 
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -50,6 +54,14 @@ while [ "$#" -gt 0 ]; do
             ;;
         --framework-dependent)
             self_contained=false
+            shift
+            ;;
+        --no-trim)
+            trim=false
+            shift
+            ;;
+        --no-compress)
+            compress=false
             shift
             ;;
         --clean)
@@ -126,8 +138,18 @@ fi
 if $single_file; then
     publish_args+=(-p:PublishSingleFile=true)
 fi
+if $trim && $self_contained; then
+    publish_args+=(-p:PublishTrimmed=true)
+else
+    trim=false
+fi
+if $compress && $single_file; then
+    publish_args+=(-p:EnableCompressionInSingleFile=true)
+else
+    compress=false
+fi
 
-echo "Publishing Sim.DeviceAgent.App ($configuration/$runtime, self-contained=$self_contained, single-file=$single_file)"
+echo "Publishing Sim.DeviceAgent.App ($configuration/$runtime, self-contained=$self_contained, single-file=$single_file, trim=$trim, compress=$compress)"
 dotnet publish "${publish_args[@]}"
 
 cp -f -- "$project/agent.example.json" "$output/"

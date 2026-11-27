@@ -1,5 +1,6 @@
 #Requires -Version 5.1
-# Publishes Sim.DeviceAgent.App. Default: self-contained single-file win-x64 with example configs.
+# Publishes Sim.DeviceAgent.App. Default: self-contained single-file win-x64 with example configs,
+# trimmed (PublishTrimmed) and compressed (EnableCompressionInSingleFile) for a small package.
 # Usage: powershell -File scripts/publish.ps1 [output-dir] [parameters]
 [CmdletBinding()]
 param(
@@ -15,6 +16,10 @@ param(
     [switch]$NoSingleFile,
 
     [switch]$FrameworkDependent,
+
+    [switch]$NoTrim,
+
+    [switch]$NoCompress,
 
     [switch]$Clean
 )
@@ -54,6 +59,8 @@ New-Item -ItemType Directory -Path $Output -Force | Out-Null
 
 $selfContainedValue = if ($FrameworkDependent) { "false" } else { "true" }
 $singleFile = -not $NoSingleFile
+$trim = -not $FrameworkDependent -and -not $NoTrim
+$compress = $singleFile -and -not $NoCompress
 $dotnetArgs = @(
     "publish",
     (Join-Path $ToolRoot "src\Sim.DeviceAgent.App"),
@@ -65,8 +72,14 @@ $dotnetArgs = @(
 if ($singleFile) {
     $dotnetArgs += "-p:PublishSingleFile=true"
 }
+if ($trim) {
+    $dotnetArgs += "-p:PublishTrimmed=true"
+}
+if ($compress) {
+    $dotnetArgs += "-p:EnableCompressionInSingleFile=true"
+}
 
-Write-Host "Publishing Sim.DeviceAgent.App ($Configuration/$RuntimeIdentifier, self-contained=$selfContainedValue, single-file=$singleFile)"
+Write-Host "Publishing Sim.DeviceAgent.App ($Configuration/$RuntimeIdentifier, self-contained=$selfContainedValue, single-file=$singleFile, trim=$trim, compress=$compress)"
 & dotnet @dotnetArgs
 if ($LASTEXITCODE -ne 0) {
     throw "dotnet publish failed with exit code $LASTEXITCODE"
