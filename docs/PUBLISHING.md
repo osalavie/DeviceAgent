@@ -1,11 +1,11 @@
 # 发布打包与体积优化
 
-> 适用版本：Sim.DeviceAgent 1.0.0（2026-11-27）。本文记录发布包的体积构成、精简措施、踩坑与冒烟清单；构建、运行与配置说明见根目录 [README.md](../README.md)。
+> 适用版本：Sim.DeviceAgent 1.0.1（2026-11-27）。本文记录发布包的体积构成、精简措施、踩坑与冒烟清单；构建、运行与配置说明见根目录 [README.md](../README.md)。
 
 ## 1. 结论
 
 - 发布默认产物为自包含单文件 `win-x64`，**目标机无需安装 .NET 或 Windows App SDK**。
-- 单文件 exe 约 **49.0 MiB**（51,382,311 字节），GitHub Release zip 约 **43.3 MiB**（含 exe 与 `agent.example.json`）。
+- 单文件 exe 约 **49.0 MiB**（51,383,160 字节），GitHub Release zip 约 **43.3 MiB**（含 exe 与 `agent.example.json`）。
 - 精简手段：Windows App SDK 按组件引用 + IL 裁剪 + 单文件压缩 + 保留必要的反射元数据。
 - 入口：`scripts/publish.ps1` / `scripts/publish.sh`，默认开启裁剪与压缩，`--no-trim` / `--no-compress` 可关闭。
 
@@ -104,7 +104,7 @@ App csproj 固定以下配置，缺一不可：
 
 ## 5. 发布冒烟清单（每次发布必做）
 
-1. `dotnet test Sim.DeviceAgent.slnx` 全绿（当前 62 个用例）。
+1. `dotnet test Sim.DeviceAgent.slnx` 全绿（当前 63 个用例）。
 2. 用脚本发布，确认 exe 体积与预期一致（当前约 49 MiB）。
 3. 隔离运行：
    - 复制 `agent.example.json` 为 `agent.json`，使用唯一 `agent.id` 与空闲端口；
@@ -116,7 +116,7 @@ App csproj 固定以下配置，缺一不可：
    - WebSocket `ws://127.0.0.1:<port>/ws` 发送 `hello` 后收到 `helloAck` 与 `status`；
    - 向文件设备输入目录写入文件，数秒后归档到 `data/archive/<yyyyMMdd>/`；
    - 主窗口标题与 UI Automation 树可读（验证 XAML 正常加载）；
-   - exe 版本信息为 `1.0.0`，`ExtractAssociatedIcon` 能取到图标（验证托盘与资源嵌入）。
+   - exe 版本信息为 `1.0.1`，`ExtractAssociatedIcon` 能取到图标（验证托盘与资源嵌入）。
 5. 清理：
    - 先结束 `--watchdog` 守护进程，再结束主进程，避免被自动拉起；
    - 确认无残留进程与 HKCU Run 项（仅删除指向临时目录的测试项）；
