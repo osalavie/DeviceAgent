@@ -50,6 +50,7 @@ internal sealed class TrayIcon : IDisposable
 
     private IntPtr _hwnd;
     private IntPtr _icon;
+    private bool _ownsIcon;
     private uint _taskbarCreatedMessage;
     private bool _disposed;
 
@@ -96,7 +97,12 @@ internal sealed class TrayIcon : IDisposable
             throw new InvalidOperationException("Could not create the tray message window.");
         }
 
-        _icon = LoadIconW(IntPtr.Zero, (IntPtr)IDI_APPLICATION);
+        _icon = LoadOwnIcon(out _ownsIcon);
+        if (_icon == IntPtr.Zero)
+        {
+            _icon = LoadIconW(IntPtr.Zero, (IntPtr)IDI_APPLICATION);
+        }
+
         _taskbarCreatedMessage = RegisterWindowMessageW("TaskbarCreated");
 
         AddIcon();
@@ -135,6 +141,32 @@ internal sealed class TrayIcon : IDisposable
             DestroyWindow(_hwnd);
             _hwnd = IntPtr.Zero;
         }
+
+        if (_ownsIcon && _icon != IntPtr.Zero)
+        {
+            DestroyIcon(_icon);
+            _ownsIcon = false;
+            _icon = IntPtr.Zero;
+        }
+    }
+
+    private static IntPtr LoadOwnIcon(out bool ownsIcon)
+    {
+        ownsIcon = false;
+        var exePath = Environment.ProcessPath;
+        if (string.IsNullOrEmpty(exePath))
+        {
+            return IntPtr.Zero;
+        }
+
+        var smallIcons = new IntPtr[1];
+        if (ExtractIconExW(exePath, 0, null, smallIcons, 1) > 0 && smallIcons[0] != IntPtr.Zero)
+        {
+            ownsIcon = true;
+            return smallIcons[0];
+        }
+
+        return IntPtr.Zero;
     }
 
     private void AddIcon()
@@ -333,6 +365,17 @@ internal sealed class TrayIcon : IDisposable
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern IntPtr LoadIconW(IntPtr instance, IntPtr iconName);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool DestroyIcon(IntPtr icon);
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern uint ExtractIconExW(
+        string file,
+        int iconIndex,
+        IntPtr[]? largeIcons,
+        IntPtr[]? smallIcons,
+        uint iconCount);
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern IntPtr CreatePopupMenu();
